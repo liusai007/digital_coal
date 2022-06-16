@@ -13,6 +13,7 @@ router = APIRouter()
 
 @router.post("/radar_test", summary="雷达测试")
 async def radar_test(radars: List[CoalRadar]):
+    print("1111111")
     radar_start(radars)
 
 
