@@ -36,6 +36,7 @@ class Config(BaseSettings):
     }
     DATA_PATH = '/opt/python/coal_data'
     CLOUD_COMBINED_PATH = DATA_PATH + '/combined_cloud'
+    CLOUD_SAMPLED_PATH = DATA_PATH + '/sampled_cloud'
 
 
 settings = Config()

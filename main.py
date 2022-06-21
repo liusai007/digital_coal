@@ -85,3 +85,12 @@ application.mount('/static', StaticFiles(directory=settings.STATIC_DIR), name="s
 # application.state.views = Jinja2Templates(directory=settings.TEMPLATE_DIR)
 
 app = application
+
+
+if __name__ == '__main__':
+    import uvicorn
+
+    uvicorn.run(app=app,
+                host='0.0.0.0',
+                port=8001,
+                workers=1)
