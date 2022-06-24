@@ -28,6 +28,7 @@ class Config(BaseSettings):
     SECRET_KEY = "session"
     SESSION_COOKIE = "session_id"
     SESSION_MAX_AGE = 14 * 24 * 60 * 60
+    CONNECT_ERROR_TIME = 10
     MINIO_CONF = {
         'endpoint': '172.16.200.243:9000',
         'access_key': 'minioadmin',
