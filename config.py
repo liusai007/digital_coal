@@ -9,6 +9,12 @@ from pydantic import BaseSettings
 from typing import List
 
 
+class RadarConfig():
+    RUNMODE: int = 0
+    SPEED: int = 64
+    ANGLESCENESCAN: int = 360
+
+
 class Config(BaseSettings):
     # 调试模式
     APP_DEBUG: bool = True
@@ -29,12 +35,15 @@ class Config(BaseSettings):
     SESSION_COOKIE = "session_id"
     SESSION_MAX_AGE = 14 * 24 * 60 * 60
     CONNECT_ERROR_TIME = 10
+    # minio 配置
     MINIO_CONF = {
         'endpoint': '172.16.200.243:9000',
         'access_key': 'minioadmin',
         'secret_key': 'minioadmin',
         'secure': False
     }
+    # 雷达参数配置
+    RADAR = RadarConfig()
     DATA_PATH = '/opt/python/coal_data'
     CLOUD_COMBINED_PATH = DATA_PATH + '/combined_cloud'
     CLOUD_SAMPLED_PATH = DATA_PATH + '/sampled_cloud'
