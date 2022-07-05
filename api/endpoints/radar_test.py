@@ -7,8 +7,10 @@ import os
 import math
 import time
 import numpy
+import minio
 import platform
 import numpy as np
+from datetime import datetime
 from pandas import DataFrame
 from pyntcloud import PyntCloud
 import scipy.linalg as linalg
@@ -20,7 +22,7 @@ from threading import Thread
 from scipy.spatial import Delaunay
 from multiprocessing import Process
 from multiprocessing import JoinableQueue
-from models.custom_class import CoalYard, CoalRadar
+from models.custom_class import CoalYard, CoalRadar, InventoryCoalResult
 from core.Response import success, fail
 from pydantic import BaseModel
 from methods.bytes_to_txt import write_bytes_to_txt
@@ -47,12 +49,16 @@ else:
 
 @router.post("/radar_test", summary="雷达测试")
 def radar_start(CoalYard: CoalYard):
+    resList = list()  # 设置一个空字典，接收煤堆对象
+
     global bin_cloud_list, all_cloud_list
     bin_cloud_list = list()
     all_cloud_list = list()
-    global runmode, speed, AngleSceneScan, create_time
+    global runmode, speed, AngleSceneScan, create_time, conn_radar, stop_radar
     runmode = 0
-    speed = 64
+    speed = 10
+    conn_radar = list()
+    stop_radar = list()
     AngleSceneScan = 360
     create_time = int(time.strftime('%m%d%H%M%S'))
     init_status = dll.NET_SDK_SIMCLT_Init()
@@ -71,18 +77,21 @@ def radar_start(CoalYard: CoalYard):
             cid = radar.id
             ip = bytes(radar.ip, encoding='utf-8')
             port = radar.port
-            dll.NET_SDK_SIMCLT_StartConnect(cid, ip, port, 120)
+            res = dll.NET_SDK_SIMCLT_StartConnect(cid, ip, port, 120)
+            print('连接状态:', res, 'cid ==', cid)
 
-        for i in range(1000):
-            if len(bin_cloud_list) == len(radars):  # 判断生成的数据文件 与 雷达数据 是否匹配
+        time.sleep(2.5)
+        while True:
+            if len(stop_radar) == len(conn_radar):
+            # if len(bin_cloud_list) == len(conn_radar):  # 判断生成的数据文件 与 雷达数据 是否匹配
                 dll.NET_SDK_SIMCLT_Destory()
                 print("===========销毁sdk============")
                 break
-            time.sleep(0.5)
     except:
         # 程序报错，就销毁 sdk
         dll.NET_SDK_SIMCLT_Destory()
 
+    startTime = datetime.now()
     for bin_cloud in bin_cloud_list:
         for radar in radars:
             if bin_cloud[0] == radar.id:
@@ -101,12 +110,12 @@ def radar_start(CoalYard: CoalYard):
     print('====================')
     combined_filename = combined_cloud_path + "/combined_cloud_" + str(create_time) + ".txt"
     combined_cloud_ndarray = np.concatenate(all_cloud_list, axis=0)
-    np.savetxt(combined_filename, combined_cloud_ndarray, fmt='%.6f', delimiter=' ')
+    np.savetxt(combined_filename, combined_cloud_ndarray, fmt='%.2f', delimiter=' ')
     # combined_cloud_ndarray = np.concatenate(all_cloud_list, axis=0).astype(np.int16)
     combined_cloud_pdarray = DataFrame(combined_cloud_ndarray[:, 0:3])
     combined_cloud_pdarray.columns = ['x', 'y', 'z']
     combined_cloud_pynt = PyntCloud(combined_cloud_pdarray)
-    voxelgrid_id = combined_cloud_pynt.add_structure("voxelgrid", n_x=200, n_y=200, n_z=200)
+    voxelgrid_id = combined_cloud_pynt.add_structure("voxelgrid", n_x=100, n_y=100, n_z=50)
     # 下面可能会报内存爆满错误 ！！！
     sampled_cloud_pdarray = combined_cloud_pynt.get_sample("voxelgrid_centroids", voxelgrid_id=voxelgrid_id,
                                                            as_PyntCloud=False)
@@ -114,19 +123,34 @@ def radar_start(CoalYard: CoalYard):
     sampled_cloud_pdarray.to_csv(sampled_filename, index=False, header=False, sep=' ', float_format='%.6f')
     # new_combined_ndarray = sampled_cloud_pdarray.values  # DataFrame 转 ndarray
     # np.savetxt(combined_filename, new_combined_ndarray, fmt='%.6f', delimiter=' ')
-    # print('点云旋转平移去重稀释完成，路径==', combined_filename)
+    endTime = datetime.now()
+    print('点云旋转平移去重稀释完成，耗时==', endTime - startTime)
 
+    # 判断yard_name 文件夹是否存在，不存在创建
+    coal_yard_path = settings.DATA_PATH + '/' + CoalYard.coalYardName
+    if not os.path.exists(coal_yard_path):
+        os.makedirs(coal_yard_path)
     for coal_heap in CoalYard.coalHeapList:
+        res = InventoryCoalResult()
+        res.coalHeapId = coal_heap.coalHeapId
+        res.coalHeapName = coal_heap.coalHeapName
+        res.density = coal_heap.density
+        res.mesId = coal_heap.mesId
         print('coal_heap ==', coal_heap)
         minio_name = 'coalHeap' + str(coal_heap.coalHeapId) + '_' + str(create_time) + '.txt'
-        minio_path = CoalYard.coalYardName + '/' + minio_name
+        minio_path = coal_yard_path + '/' + minio_name
+        vom_and_maxhei_and_minio = heap_volume_and_maxheight(coal_heap, sampled_cloud_pdarray,
+                                                             minio_path=minio_path, minio_name=minio_name)
+        # res.cloudInfo = put_cloud(minio_path, minio_name)
+        res.cloudInfo = vom_and_maxhei_and_minio['minio_url']
+        res.volume = vom_and_maxhei_and_minio['volume']
+        res.maxHeight = vom_and_maxhei_and_minio['maxHeight']
 
-        heap_cloud_path = settings.DATA_PATH + '/' + coal_heap.coalHeapName + '.txt'
-        heap_volume_and_maxheight(coal_heap, sampled_cloud_pdarray, heap_cloud_path=heap_cloud_path)
-        # print("heap ==", coal_heap.coalHeapArea)
-        # bb = np.array(coal_heap.coalHeapArea)
+        resList.append(res)
 
-    return "hello world"
+    last_time = datetime.now()
+    print("============程序总耗时 =========== ", last_time - startTime)
+    return success(msg='盘煤成功', data=resList)
 
 
 def _callback(cid: c_uint, datalen: c_int, data, createe_time):
@@ -142,8 +166,14 @@ def _callback(cid: c_uint, datalen: c_int, data, createe_time):
         dll.NET_SDK_SIMCLT_ZTRD_SetRunMode(cid, runmode, 64, 0, 360)
         dll.NET_SDK_SIMCLT_ZTRD_RotateStop(cid)
         dll.NET_SDK_SIMCLT_ZTRD_RotateBegin(cid, speed, 0, AngleSceneScan)
+        conn_radar.append(cid)
     elif code == 3535:
         print("连接失败")
+        file.close()
+        dll.NET_SDK_SIMCLT_ZTRD_RotateStop(cid)
+        dll.NET_SDK_SIMCLT_StopConnectCid(cid)
+        # bin_cloud_list.append([cid, filename])
+        # stop_radar.append(cid)
     elif code == 51108:
         print("运行模式设置成功")
     elif code == 118:
@@ -153,6 +183,7 @@ def _callback(cid: c_uint, datalen: c_int, data, createe_time):
         lastLineFlag = data[44]
         if lastLineFlag == b'\x80':
             file.close()
+            stop_radar.append(cid)
             dll.NET_SDK_SIMCLT_ZTRD_RotateStop(cid)
             dll.NET_SDK_SIMCLT_StopConnectCid(cid)
             bin_cloud_list.append([cid, filename])
@@ -199,7 +230,22 @@ def euler_rotate(cloud_ndarray, radar, save_path=None):
     return new_cloud_array
 
 
-def heap_volume_and_maxheight(coal_heap, cloud_pdarray, heap_cloud_path: str):
+def put_cloud(filepath, filename):
+    object_name = 'cloud_date/' + time.strftime("%Y/%m/%d/") + filename
+    # inventory-coal/cloud_date/2022/06/14/a.txt
+    minio_conf = settings.MINIO_CONF
+    minio_client = minio.Minio(**minio_conf)
+    minio_client.fput_object(bucket_name='inventory-coal',
+                             object_name=object_name,
+                             file_path=filepath,
+                             content_type="application/csv")
+
+    minio_path = "http://" + minio_conf['endpoint'] + '/inventory-coal/' + object_name
+    print("minio_path == ", minio_path)
+    return minio_path
+
+
+def heap_volume_and_maxheight(coal_heap, cloud_pdarray: DataFrame, minio_path: str, minio_name: str):
     x_list = []
     y_list = []
     for heap_point in coal_heap.coalHeapArea:
@@ -210,63 +256,56 @@ def heap_volume_and_maxheight(coal_heap, cloud_pdarray, heap_cloud_path: str):
         max_y = max(y_list)
         min_y = min(y_list)
 
-    a = cloud_pdarray
-    b = a[(a['x'] < -20) & a['y'] > 0]
+    # a = cloud_pdarray
+    split_pdarray = cloud_pdarray[(cloud_pdarray['x'] < max_x) & (cloud_pdarray['x'] > min_x)
+                                  & (cloud_pdarray['y'] < max_y) & (cloud_pdarray['y'] > min_y)]
+    # split_ndarray = split_pdarray.values
+
+    split_pdarray.to_csv(minio_path, index=False, header=False, sep=' ', float_format='%.6f')
+    minio_url = put_cloud(minio_path, minio_name)
     print("*****************************")
-    # # 判断点位是否位于外矩形区域
-    # x = cloud_ndarray[:, 0]
-    # y = cloud_ndarray[:, 1]
-    # z = cloud_ndarray[:, 2]
-    #
-    # with open(heap_cloud_path, 'w') as f:
-    #     # print("创建成功:", filename)
-    #     for i in range(x.shape[0]):
-    #         if (x[i] > float(min_x) and y[i] > float(min_y)
-    #                 and x[i] < float(max_x) and y[i] < float(max_y)):
-    #             f.write('%f %f %f\n' % (x[i], y[i], z[i]))
-    #
-    # pts = numpy.genfromtxt(heap_cloud_path)
-    # if pts.__len__() < 500:
-    #     return {'maxHeight': 0, 'volume': 0}
-    # # return new_ndarray
-    # u = pts[:, 0]  # 这里会报错，如果filename为空，即切割区域没有点云
-    # v = pts[:, 1]
-    # z = pts[:, 2]
-    # x = u
-    # y = v
-    #
-    # maxHeight = max(z) - min(z)
-    #
-    # ply_name = heap_cloud_path.replace('.txt', '.ply')
-    # tri = Delaunay(np.array([u, v]).T)
-    # f2 = open(ply_name, 'w')
-    # f2.write('ply\n')
-    # f2.write('format ascii 1号雷达.0\n')
-    # f2.write('comment Created by CloudCompare v2.11.3 (Anoia)\n')
-    # f2.write('comment Created 2021/12/26 19:23\n')
-    # f2.write('obj_info Generated by CloudCompare!\n')
-    # f2.write('element vertex ')
-    # f2.write(str(x.size) + '\n')
-    # f2.write('property float x\n')
-    # f2.write('property float y\n')
-    # f2.write('property float z\n')
-    # f2.write('element face ')
-    # f2.write(str(tri.simplices.shape[0]) + '\n')
-    # f2.write('property list uchar int vertex_indices\n')
-    # f2.write('end_header\n')
-    # for i in range(x.shape[0]):
-    #     f2.write('%d %d %d\n' % (x[i], y[i], z[i]))
-    # for vert in tri.simplices:
-    #     f2.write('3 %d %d %d\n' % (vert[0], vert[1], vert[2]))
-    # f2.close()
-    # # 凸面计算体积
-    # diamond = PyntCloud.from_file(ply_name)
-    # convex_hull_id = diamond.add_structure("convex_hull")
-    # convex_hull = diamond.structures[convex_hull_id]
-    # diamond.mesh = convex_hull.get_mesh()
-    # # diamond.to_file("bunny_hull.ply", also_save=["mesh"])
-    # volume = convex_hull.volume
-    # # 三角剖分结束
-    # response = {'maxHeight': maxHeight, 'volume': volume}
+
+    split_ndarray = split_pdarray.values
+    try:
+        u = split_ndarray[:, 0]  # 这里会报错，如果filename为空，即切割区域没有点云
+        v = split_ndarray[:, 1]
+        z = split_ndarray[:, 2]
+        x = u
+        y = v
+        maxHeight = max(z) - min(z)
+    except:
+        return {'maxHeight': 0, 'volume': 0, 'minio_url': minio_url}
+
+    ply_name = minio_path.replace('.txt', '.ply')
+    tri = Delaunay(np.array([u, v]).T)
+    f2 = open(ply_name, 'w')
+    f2.write('ply\n')
+    f2.write('format ascii 1号雷达.0\n')
+    f2.write('comment Created by CloudCompare v2.11.3 (Anoia)\n')
+    f2.write('comment Created 2021/12/26 19:23\n')
+    f2.write('obj_info Generated by CloudCompare!\n')
+    f2.write('element vertex ')
+    f2.write(str(x.size) + '\n')
+    f2.write('property float x\n')
+    f2.write('property float y\n')
+    f2.write('property float z\n')
+    f2.write('element face ')
+    f2.write(str(tri.simplices.shape[0]) + '\n')
+    f2.write('property list uchar int vertex_indices\n')
+    f2.write('end_header\n')
+    for i in range(x.shape[0]):
+        f2.write('%d %d %d\n' % (x[i], y[i], z[i]))
+    for vert in tri.simplices:
+        f2.write('3 %d %d %d\n' % (vert[0], vert[1], vert[2]))
+    f2.close()
+    # 凸面计算体积
+    diamond = PyntCloud.from_file(ply_name)
+    convex_hull_id = diamond.add_structure("convex_hull")
+    convex_hull = diamond.structures[convex_hull_id]
+    diamond.mesh = convex_hull.get_mesh()
+    # diamond.to_file("bunny_hull.ply", also_save=["mesh"])
+    volume = convex_hull.volume
+    # 三角剖分结束
+    response = {'maxHeight': maxHeight, 'volume': volume, 'minio_url': minio_url}
     # print('response ==', response)
-    # return response
+    return response
