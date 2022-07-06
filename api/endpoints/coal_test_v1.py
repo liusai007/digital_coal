@@ -59,7 +59,7 @@ else:
 @router.post("/coal_test_v1", summary="刘赛的煤场测试_V1")
 async def inventory_coal(coal_yard: CoalYard):
     # 此接口实现了数据一帧一帧采集，一帧一帧显示
-    return main_function_v1(coal_yard)
+    return main_function(coal_yard)
 
 
 def _callback(cid: c_uint, datalen: c_int, data, paddr):
@@ -332,7 +332,7 @@ def bytes_cloud_frame_rotated(args: dict):
             # all_cloud_list.append(rotated_radar_cloud_ndarray)
 
 
-def main_function_v1(coal_yard: CoalYard):
+def main_function(coal_yard: CoalYard):
     # 此函数实现了数据一帧一帧采集，一帧一帧显示
     global Coal_Yard, BYTES_IO
     BYTES_IO = BytesIO()
