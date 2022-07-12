@@ -50,10 +50,12 @@ if platform.system() == 'Windows':
     from ctypes import windll
     dll = windll.LoadLibrary(dllPath)
     CALLBACK = WINFUNCTYPE(None, c_uint, c_int, POINTER(c_char), c_int)
+    dll.NET_SDK_SIMCLT_Init()
 else:
     from ctypes import cdll
     dll = cdll.LoadLibrary(soPath)
     CALLBACK = CFUNCTYPE(None, c_uint, c_int, POINTER(c_char), c_int)
+    dll.NET_SDK_SIMCLT_Init()
 
 
 @router.post("/coal_test_v1", summary="刘赛的煤场测试_V1")
@@ -88,7 +90,6 @@ def _callback(cid: c_uint, datalen: c_int, data, paddr):
         kwargs = {'data': points_data, 'cid': cid}
         pool.submit(bytes_cloud_frame_rotated, kwargs)
         # cloud_rotated_result = pool.submit(bytes_cloud_frame_rotated, bytes_frame).result()
-        # np.savetxt(fname=save_path, X=cloud_rotated_result, fmt='%.2f', delimiter=' ')
 
         last_line_flag = data[44]
         if last_line_flag == b'\x80':
@@ -348,8 +349,8 @@ def main_function(coal_yard: CoalYard):
     if not os.path.exists(FRAME_DATA_PATH):
         os.makedirs(FRAME_DATA_PATH)
 
-    init_status = dll.NET_SDK_SIMCLT_Init()
-    print("初始化结果:", init_status)
+    # init_status = dll.NET_SDK_SIMCLT_Init()
+    # print("初始化结果:", init_status)
     callBackFunc = CALLBACK(_callback)
     gCallbackFuncList.append(callBackFunc)
     dll.NET_SDK_SIMCLT_Set_Callback(callBackFunc, 88976)
