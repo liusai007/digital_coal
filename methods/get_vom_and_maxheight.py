@@ -1,25 +1,25 @@
 import os
 import numpy
 import numpy as np
+from datetime import datetime
 from scipy.spatial import Delaunay
 from pyntcloud import PyntCloud
 
 
-def get_vom_and_maxheight(filename):
+async def heap_vom_and_maxheight(cloud_ndarray: numpy.ndarray, minio_path: str = None):
     # 三角剖分开始
-    if os.path.getsize(filename) < 500:
+    if cloud_ndarray.__len__() < 500:
         return {'maxHeight': 0, 'volume': 0}
 
-    pts = numpy.loadtxt(filename)
-    u = pts[:, 0]  # 这里会报错，如果filename为空，即切割区域没有点云
-    v = pts[:, 1]
-    z = pts[:, 2]
+    u = cloud_ndarray[:, 0]
+    v = cloud_ndarray[:, 1]
+    z = cloud_ndarray[:, 2]
     x = u
     y = v
 
     maxHeight = max(z) - min(z)
 
-    ply_name = filename.replace('.txt', '.ply')
+    ply_name = minio_path.replace('.txt', '.ply')
     tri = Delaunay(np.array([u, v]).T)
     f2 = open(ply_name, 'w')
     f2.write('ply\n')
@@ -41,13 +41,19 @@ def get_vom_and_maxheight(filename):
     for vert in tri.simplices:
         f2.write('3 %d %d %d\n' % (vert[0], vert[1], vert[2]))
     f2.close()
+
     # 凸面计算体积
+    c_time = datetime.now()
+    print(f"开始计算时间 ==========={c_time}")
     diamond = PyntCloud.from_file(ply_name)
     convex_hull_id = diamond.add_structure("convex_hull")
     convex_hull = diamond.structures[convex_hull_id]
     diamond.mesh = convex_hull.get_mesh()
     # diamond.to_file("bunny_hull.ply", also_save=["mesh"])
     volume = convex_hull.volume
+    cc_time = datetime.now()
+    print(f"计算结束时间 ==========={cc_time}")
+    print(f"计算体积耗时 ============={cc_time - c_time}")
     # 三角剖分结束
-    response = {'maxHeight': maxHeight, 'volume': volume / 1000000}
+    response = {'maxHeight': maxHeight, 'volume': volume}
     return response
