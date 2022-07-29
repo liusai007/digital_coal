@@ -5,12 +5,13 @@ import platform
 import numpy as np
 from ctypes import *
 from io import BytesIO
-import scipy.linalg as linalg
-from pandas import DataFrame
 from config import settings
+from pandas import DataFrame
 from datetime import datetime
-from concurrent.futures import ThreadPoolExecutor
+import scipy.linalg as linalg
 from models.custom_class import *
+from concurrent.futures import ThreadPoolExecutor
+
 
 # 雷达参数设置
 RunMode = settings.RADAR.RUNMODE
@@ -43,18 +44,12 @@ else:
     dll.NET_SDK_SIMCLT_Init()
 
 
-def _callback(cid: c_uint, datalen: c_int, data, ws_id):
+def radar_callback(cid: c_uint, datalen: c_int, data, ws_id):
     # print("回调中的线程名 ===========", threading.current_thread().name)
     code = int.from_bytes(data[2:4], byteorder='little', signed=True)
 
     if code == 3534:
         print("雷达连接成功, cid ==", cid)
-        # dll.NET_SDK_SIMCLT_ZTRD_SetRunMode(cid, RunMode, 64, 0, 360)
-        # print("雷达设置运行模式成功, cid ==", cid)
-        # dll.NET_SDK_SIMCLT_ZTRD_RotateStop(cid)
-        # print("雷达停止成功, cid ==", cid)
-        # dll.NET_SDK_SIMCLT_ZTRD_RotateBegin(cid, Speed, 0, AngleSceneScan)
-        # print("雷达启动成功, cid ==", cid)
         websocket = get_websocket_by_wsid(ws_id=ws_id)
         bucket = websocket.conn_radarsBucket
         if cid not in bucket:
@@ -105,45 +100,37 @@ def set_callback_function(func, ws_id):
 
 
 def bytes_cloud_frame_rotated(kwargs: dict):
-    cid = kwargs['cid']
-    points_data = kwargs['data']
     ws_id = kwargs['ws_id']
-    # print('ws_id == ', ws_id)
     websocket = get_websocket_by_wsid(ws_id=ws_id)
     coal_yard = websocket.coalYard
     list_buffer = websocket.listBuffer
 
-    bytes_frame = join_cid_to_bytes(point_bytes=points_data, cid=cid)
-    # list_buffer.write(bytes_frame)
-    # ALL_DATA.append(bytes_frame)
-    # BYTES_IO.write(bytes_frame)
+    # bytes_frame = join_cid_to_bytes(point_bytes=points_data, cid=cid)
+    # # # 判断yard_name 文件夹是否存在，不存在创建
+    # FRAME_DATA_PATH = settings.DATA_PATH + '/' + coal_yard.coalYardName + '/frame_data'
+    # if not os.path.exists(FRAME_DATA_PATH):
+    #     os.makedirs(FRAME_DATA_PATH)
 
-    time_now = datetime.now().strftime('%m%d%H%M%S%f')
-    # # 判断yard_name 文件夹是否存在，不存在创建
-    FRAME_DATA_PATH = settings.DATA_PATH + '/' + coal_yard.coalYardName + '/frame_data'
-    if not os.path.exists(FRAME_DATA_PATH):
-        os.makedirs(FRAME_DATA_PATH)
+    points_data = kwargs['data']
+    cloud_ndarray = np.frombuffer(points_data, dtype=np.int16).reshape(-1, 3)
 
-    cloud_ndarray = np.frombuffer(bytes_frame, dtype=np.int16).reshape(-1, 4)
-    cloud_pdarray = DataFrame(cloud_ndarray[:, 0:4])
-    cloud_pdarray.columns = ['cid', 'x', 'y', 'z']  # 给选取到的数据 附上标题
-
+    cid = kwargs['cid']
     radars = coal_yard.coalRadarList
     for radar in radars:
-        cid = radar.id
-        if cloud_pdarray['cid'][0] == cid:
-            radar_cloud_pdarray = cloud_pdarray[cloud_pdarray['cid'] == cid][['x', 'y', 'z']]
-            radar_cloud_ndarray = radar_cloud_pdarray.values
+        if radar.id == cid:
+            # if cloud_pdarray['cid'][0] == cid:
+            #     radar_cloud_pdarray = cloud_pdarray[cloud_pdarray['cid'] == cid][['x', 'y', 'z']]
+            #     radar_cloud_ndarray = radar_cloud_pdarray.values
 
             div = np.array([100, 100, 100])
-            radar_cloud_ndarray = np.divide(radar_cloud_ndarray, div)
+            radar_cloud_ndarray = np.divide(cloud_ndarray, div)
             radar_cloud_ndarray.astype(np.float16)
 
             rotated_radar_cloud_ndarray: numpy.ndarray = euler_rotate(radar_cloud_ndarray, radar)
-            new_cloud: numpy.ndarray = rotated_radar_cloud_ndarray.reshape(-1, 3)
-            new_cloud: numpy.ndarray = new_cloud[:, 1:4]
-            new_cloud_list = new_cloud.tolist()
-            list_buffer.append(bytes_frame)
+            # new_cloud: numpy.ndarray = rotated_radar_cloud_ndarray.reshape(-1, 3)
+            # new_cloud: numpy.ndarray = new_cloud[:, 1:4]
+            new_cloud_list = rotated_radar_cloud_ndarray.tolist()
+            list_buffer.append(new_cloud_list)
             # await websocket.send_text(str(new_cloud_list))
 
             # save_path = FRAME_DATA_PATH + '/radar_' + str(cid) + '_cloudData_' + str(time_now) + ".txt"

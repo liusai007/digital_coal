@@ -3,12 +3,18 @@
 @Author : lpy
 @DES:
 """
+import io
 import ctypes
 import asyncio
+import requests
 from methods.radar_func import *
 from methods.volume_func import *
 from methods.coal_yard import coal_yard_dict
-from methods.radar_func import _callback
+from methods.send_data import send_frame_data
+from methods.radar_func import radar_callback
+from methods.put_cloud import put_cloud_to_minio
+from methods.bounding_box_filter import bounding_box_filter
+from methods.get_vom_and_maxheight import heap_vom_and_maxheight
 from models.dict_obj import DictObj
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from api.endpoints.ws import *
@@ -19,7 +25,6 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.sessions import SessionMiddleware
 from fastapi.openapi.docs import (get_redoc_html, get_swagger_ui_html, get_swagger_ui_oauth2_redirect_html)
-
 from config import settings
 from core import Events, Exceptions, Middleware, Router
 
@@ -63,6 +68,8 @@ application.include_router(Router.router)
 
 # 静态资源目录
 application.mount('/static', StaticFiles(directory=settings.STATIC_DIR), name="static")
+
+
 # application.state.views = Jinja2Templates(directory=settings.TEMPLATE_DIR)
 
 
@@ -125,7 +132,7 @@ async def websocket_endpoint(websocket: WebSocket):
     ws_id = id(websocket)
     client_id = websocket.query_params['clientId']
     # 设置回调函数，将 websocket 内存地址作为参数，传入回调中
-    set_callback_function(func=_callback, ws_id=ws_id)
+    set_callback_function(func=radar_callback, ws_id=ws_id)
     try:
         while True:
             data = await websocket.receive_text()
@@ -166,8 +173,13 @@ async def websocket_endpoint(websocket: WebSocket):
                 await websocket.send_text(data='消息无法识别')
                 continue
 
-            main_function(wsid=ws_id)
-            # 主函数实现用于切割煤场并计算体积的功能
+            # 发送长度为3000的数据帧，n代表一次发送的数据长度
+            result = await send_frame_data(websocket, n=3000)
+            if result == "success":
+                cloud_list = websocket.listBuffer
+                cloud_ndarray = numpy.array(cloud_list)
+                # 实现用于切割煤场并计算体积的功能
+                res_list = await split_and_calculate_volume(coal_yard=coal_yard_obj, cloud_ndarray=cloud_ndarray)
 
     except WebSocketDisconnect:
         manager.disconnect(websocket)
@@ -187,25 +199,52 @@ async def start(ws_id):
             await asyncio.sleep(1.5)
 
 
-def main_function(wsid):
-    websocket = get_websocket_by_wsid(wsid)
-    while True:
-        conn_bucket = websocket.conn_radarsBucket
-        print("conn_bucket == ", conn_bucket)
+async def split_and_calculate_volume(coal_yard, cloud_ndarray: numpy.ndarray):
+    res_list = list()  # 设置一个空字典，接收煤堆对象
+    time_stamp = str(time.strftime("%m%d%H%M%S"))  # 设置时间戳，标记文件生成时间
 
-        if conn_bucket.__len__() == 0:
-            # 雷达停止的判断条件
-            list_buffer = websocket.listBuffer
-            all_data: numpy.ndarray = numpy.array(list_buffer)
-            cloud_pdarray = DataFrame(all_data)
-            coal_yard = websocket.coalYard
-            # conn_bucket长度为0，表示雷达已全部停止，开始进行切割计算体积操作
-            res_list = split_and_calculate_volume(coal_yard, cloud_pdarray=cloud_pdarray)
-            print(res_list)
-            break
-        else:
-            continue
+    # 判断yard_name 文件夹是否存在，不存在创建
+    coal_yard_directory = settings.DATA_PATH + '/' + coal_yard.coalYardName
+    if not os.path.exists(coal_yard_directory):
+        os.makedirs(coal_yard_directory)
 
+    # 遍历获取单个煤堆信息，并进行计算体积操作
+    heaps = coal_yard.coalHeapList
+    print('heladlfa')
+    for heap in heaps:
+        res = InventoryCoalResult()
+        res.coalHeapId = heap.coalHeapId
+        res.coalHeapName = heap.coalHeapName
+        res.density = heap.density
+        res.mesId = heap.mesId
+
+        minio_name = 'coalHeap' + str(heap.coalHeapId) + '_' + time_stamp + '.txt'
+        minio_path = coal_yard_directory + '/' + minio_name
+
+        # 根据煤堆区域切割获取小点云文件(ndarray类型)，并保存ndarray类型为txt文件
+        split_cloud_ndarray: numpy.ndarray = bounding_box_filter(cloud_ndarray, heap.coalHeapArea)
+        # numpy.savetxt(fname=minio_path, X=split_cloud_ndarray, fmt='%.2f', delimiter=' ')
+
+        list_cloud = split_cloud_ndarray.tolist()
+        bytes_cloud = bytes(str(list_cloud), encoding='utf-8')
+
+        # 根据小点云文件(ndarray类型)计算体积和高度
+        vom_start = datetime.now()
+        vom_and_maxheight = await heap_vom_and_maxheight(cloud_ndarray=split_cloud_ndarray, minio_path=minio_path)
+        vom_end = datetime.now()
+        print(f"{heap.coalHeapName} 计算体积运行时间 === {vom_end - vom_start}")
+        res.volume = vom_and_maxheight['volume']
+        res.maxHeight = vom_and_maxheight['maxHeight']
+        print("%s 体积: %.2f，高度: %.2f" % (res.coalHeapName, res.volume, res.maxHeight))
+
+        # 上传文件至 minio,返回minio文件路径
+        # 例如："http://172.16.200.243:9000/inventory-coal/2022/05/24/1_20220510144243A001.txt"
+        data_buffer = io.BytesIO(bytes_cloud)
+        res.cloudInfo = await put_cloud_to_minio(f_name=minio_name, data=data_buffer, length=len(bytes_cloud))
+
+        # 煤堆信息对象保存至 list
+        res_list.append(res)
+    return res_list
 
 
 if __name__ == '__main__':
