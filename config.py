@@ -9,6 +9,10 @@ from pydantic import BaseSettings
 from typing import List
 
 
+class PathConfig(object):
+    BASEURL: str = "http://172.16.200.239:9070/stage-api"
+
+
 class RadarConfig():
     RUNMODE: int = 0
     SPEED: int = 64
