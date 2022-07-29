@@ -1,5 +1,6 @@
 from pydantic import BaseModel
 from typing import List
+from io import BytesIO
 
 
 class CoalRadar(BaseModel):
@@ -45,3 +46,5 @@ class InventoryCoalResult:
     cloudInfo: str
     density: float = None
     mesId: int = None
+    bytes_buffer: bytes
+

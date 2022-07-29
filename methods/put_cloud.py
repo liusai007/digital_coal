@@ -3,7 +3,7 @@ import minio
 from config import settings
 
 
-async def put_cloud_to_minio(f_name, data, length):
+def put_cloud_to_minio(f_name, data, length):
     object_name = 'cloud_date/' + time.strftime("%Y/%m/%d/") + f_name
     # 例: inventory-coal/cloud_date/2022/06/14/a.txt
     minio_conf = settings.MINIO_CONF

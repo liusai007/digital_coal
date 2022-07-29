@@ -68,9 +68,11 @@ async def inventory_coal(coal_yard: CoalYard = None):
 
         list_cloud = split_cloud_ndarray.tolist()
         bytes_cloud = bytes(str(list_cloud), encoding='utf-8')
+        res.bytes_buffer = bytes_cloud
 
         # 根据小点云文件(ndarray类型)计算体积和高度
         vom_start = datetime.now()
+        print("进入体积计算")
         vom_and_maxheight = await heap_vom_and_maxheight(cloud_ndarray=split_cloud_ndarray, minio_path=minio_path)
         vom_end = datetime.now()
         print(f"{heap.coalHeapName} 计算体积运行时间 === {vom_end - vom_start}")
@@ -80,12 +82,31 @@ async def inventory_coal(coal_yard: CoalYard = None):
 
         # 上传文件至 minio,返回minio文件路径
         # 例如："http://172.16.200.243:9000/inventory-coal/2022/05/24/1_20220510144243A001.txt"
-        data_buffer = io.BytesIO(bytes_cloud)
-        res.cloudInfo = await put_cloud_to_minio(f_name=minio_name, data=data_buffer, length=len(bytes_cloud))
+        # data_buffer = io.BytesIO(bytes_cloud)
+        # res.cloudInfo = await put_cloud_to_minio(f_name=minio_name, data=data_buffer, length=len(bytes_cloud))
 
         # 煤堆信息对象保存至 list
         res_list.append(res)
 
+    put_put(res_list, coal_yard=coal_yard)
+
     end_time = datetime.now()
     print("运行时间 ==============", end_time - start_time)
     return success(msg='盘煤成功', data=res_list)
+
+
+def put_put(res_list, coal_yard):
+    print("进入上传 mino ")
+    time_stamp = str(time.strftime("%m%d%H%M%S"))
+
+    # 判断yard_name 文件夹是否存在，不存在创建
+    coal_yard_directory = settings.DATA_PATH + '/' + coal_yard.coalYardName
+    if not os.path.exists(coal_yard_directory):
+        os.makedirs(coal_yard_directory)
+
+    for heap in res_list:
+        minio_name = 'coalHeap' + str(heap.coalHeapId) + '_' + time_stamp + '.txt'
+        minio_path = coal_yard_directory + '/' + minio_name
+
+        data_buffer = io.BytesIO(heap.bytes_buffer)
+        put_cloud_to_minio(f_name=minio_name, data=data_buffer, length=len(heap.bytes_buffer))
