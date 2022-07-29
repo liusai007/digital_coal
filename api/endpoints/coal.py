@@ -13,7 +13,7 @@ from config import settings
 from core.Response import success, fail
 from concurrent.futures import ThreadPoolExecutor
 from methods.cloud_concatenate import cloud_concatenate
-from methods.put_cloud import put_cloud
+from methods.put_cloud import put_cloud_to_minio
 from methods.bounding_box_filter import bounding_box_filter
 from models.custom_class import CoalYard, InventoryCoalResult
 from methods.get_vom_and_maxheight import heap_vom_and_maxheight
@@ -51,6 +51,7 @@ async def inventory_coal(coal_yard: CoalYard = None):
 
     # 遍历获取单个煤堆信息，并进行计算体积操作
     heaps = coal_yard.coalHeapList
+    print('heladlfa')
     for heap in heaps:
         res = InventoryCoalResult()
         res.coalHeapId = heap.coalHeapId
@@ -65,8 +66,8 @@ async def inventory_coal(coal_yard: CoalYard = None):
         split_cloud_ndarray: numpy.ndarray = bounding_box_filter(combined_cloud_ndarray, heap.coalHeapArea)
         # numpy.savetxt(fname=minio_path, X=split_cloud_ndarray, fmt='%.2f', delimiter=' ')
 
-        # split_bytes_cloud = split_cloud_ndarray.tobytes()
-        ll = split_cloud_ndarray.tolist()
+        list_cloud = split_cloud_ndarray.tolist()
+        bytes_cloud = bytes(str(list_cloud), encoding='utf-8')
 
         # 根据小点云文件(ndarray类型)计算体积和高度
         vom_start = datetime.now()
@@ -77,9 +78,10 @@ async def inventory_coal(coal_yard: CoalYard = None):
         res.maxHeight = vom_and_maxheight['maxHeight']
         print("%s 体积: %.2f，高度: %.2f" % (res.coalHeapName, res.volume, res.maxHeight))
 
-        b = io.BytesIO(str(ll).encode())
-        # 上传文件至 minio,返回值例如："http://172.16.200.243:9000/inventory-coal/2022/05/24/1_20220510144243A001.txt"
-        res.cloudInfo = await put_cloud(minio_name, b, length=ll.__len__())
+        # 上传文件至 minio,返回minio文件路径
+        # 例如："http://172.16.200.243:9000/inventory-coal/2022/05/24/1_20220510144243A001.txt"
+        data_buffer = io.BytesIO(bytes_cloud)
+        res.cloudInfo = await put_cloud_to_minio(f_name=minio_name, data=data_buffer, length=len(bytes_cloud))
 
         # 煤堆信息对象保存至 list
         res_list.append(res)
