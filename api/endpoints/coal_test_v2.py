@@ -32,17 +32,19 @@ async def inventory_coal(coal_yard: CoalYard):
     if begin_response is False:
         return fail(msg="存在未连接成功的雷达，启动失败！")
 
-    # 代表全部雷达停止的判断条件
-    while len(coal_yard.conn_radarsBucket) == 0:
-        radars = coal_yard.coalRadarList
-        for radar in radars:
-            radar_bytes_data = radar.bytes_buffer
-            radar_cloud_ndarray = bytes_cloud_data_rotated(bytes_data=radar_bytes_data, radar=radar)
-            cloud_ndarray_list.append(radar_cloud_ndarray)
+    # 代表全部雷达停止的判断条件， 如果存在未中断连接的雷达则进入循环，否则跳出
+    while len(coal_yard.conn_radarsBucket) != 0:
+        continue
 
-        combined_cloud_ndarray = numpy.concatenate(cloud_ndarray_list, axis=0)
-        res_list = await split_and_calculate_volume(coal_yard=coal_yard, cloud_ndarray=combined_cloud_ndarray)
-        return res_list
+    radars = coal_yard.coalRadarList
+    for radar in radars:
+        radar_bytes_data = radar.bytes_buffer
+        radar_cloud_ndarray = bytes_cloud_data_rotated(bytes_data=radar_bytes_data, radar=radar)
+        cloud_ndarray_list.append(radar_cloud_ndarray)
+
+    combined_cloud_ndarray = numpy.concatenate(cloud_ndarray_list, axis=0)
+    res_list = await split_and_calculate_volume(coal_yard=coal_yard, cloud_ndarray=combined_cloud_ndarray)
+    return res_list
 
 
 def _callback(cid: c_uint, data_len: c_int, data, yard_id):
