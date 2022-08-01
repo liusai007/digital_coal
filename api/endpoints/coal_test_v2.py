@@ -29,7 +29,7 @@ async def inventory_coal(coal_yard: CoalYard):
         radar.bytes_buffer = b''
         # radar.__setattr__('bytes_buffer', b'')
 
-    set_callback_function(func=_callback, ws_id=yard_id)
+    set_callback_function(func=_callback, obj_id=yard_id)
     radars_start_connect(radars=radars)
     await asyncio.sleep(2)
     begin_response = radars_rotate_begin(radars=radars, coal_yard=coal_yard)

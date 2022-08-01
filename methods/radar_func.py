@@ -93,10 +93,10 @@ def radar_callback(cid: c_uint, datalen: c_int, data, ws_id):
     return
 
 
-def set_callback_function(func, ws_id):
+def set_callback_function(func, obj_id):
     callBackFunc = CALLBACK(func)
     gCallbackFuncList.append(callBackFunc)
-    dll.NET_SDK_SIMCLT_Set_Callback(callBackFunc, ws_id)
+    dll.NET_SDK_SIMCLT_Set_Callback(callBackFunc, obj_id)
 
 
 def bytes_cloud_frame_rotated(kwargs: dict):

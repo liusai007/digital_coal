@@ -132,7 +132,7 @@ async def websocket_endpoint(websocket: WebSocket):
     ws_id = id(websocket)
     client_id = websocket.query_params['clientId']
     # 设置回调函数，将 websocket 内存地址作为参数，传入回调中
-    set_callback_function(func=radar_callback, ws_id=ws_id)
+    set_callback_function(func=radar_callback, obj_id=ws_id)
     try:
         while True:
             data = await websocket.receive_text()
