@@ -6,6 +6,7 @@
 import os
 import time
 import minio
+import numpy
 import numpy as np
 from pandas import DataFrame
 from config import settings
@@ -14,7 +15,7 @@ from pyntcloud import PyntCloud
 from models.custom_class import InventoryCoalResult
 
 
-def heap_volume_and_maxheight(coal_heap, cloud_pdarray: DataFrame, minio_path: str, minio_name: str):
+def heap_volume_and_maxheight(coal_heap, cloud_ndarray: numpy.ndarray, minio_path: str, minio_name: str):
     x_list = []
     y_list = []
     for heap_point in coal_heap.coalHeapArea:
@@ -25,16 +26,17 @@ def heap_volume_and_maxheight(coal_heap, cloud_pdarray: DataFrame, minio_path: s
         max_y = max(y_list)
         min_y = min(y_list)
 
-    split_pdarray = cloud_pdarray[(cloud_pdarray['x'] < max_x) & (cloud_pdarray['x'] > min_x)
-                                  & (cloud_pdarray['y'] < max_y) & (cloud_pdarray['y'] > min_y)]
+    split_ndarray = cloud_ndarray[(cloud_ndarray['x'] < max_x) & (cloud_ndarray['x'] > min_x)
+                                  & (cloud_ndarray['y'] < max_y) & (cloud_ndarray['y'] > min_y)]
     # split_ndarray = split_pdarray.values
 
     # minio_path 为本地的文件名
-    split_pdarray.to_csv(minio_path, index=False, header=False, sep=' ', float_format='%.6f')
+    # split_ndarray.to_csv(minio_path, index=False, header=False, sep=' ', float_format='%.6f')
+    # numpy.savetxt(fname=minio_path, X=split_ndarray, delimiter=' ', fmt='%.2f')
     minio_url = put_cloud(minio_path, minio_name)
     print("*****************************")
 
-    split_ndarray = split_pdarray.values
+    split_ndarray = split_ndarray.values
     if split_ndarray.__len__() < 500:
         return {'maxHeight': 0, 'volume': 0, 'minio_url': minio_url}
 
