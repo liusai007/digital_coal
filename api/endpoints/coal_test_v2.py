@@ -5,7 +5,6 @@
 """
 import io
 import time
-import minio
 import asyncio
 from core.Response import *
 from fastapi import APIRouter
@@ -21,7 +20,7 @@ router = APIRouter()
 @router.post("/coal_test_v2", summary="标准测试版")
 async def inventory_coal(coal_yard: CoalYard):
     yard_id = id(coal_yard)
-    cloud_ndarray_list = list()
+    cloud_ndarray_list: List[numpy.ndarray] = list()
     set_callback_function(func=_callback, obj_id=yard_id)
 
     radars = coal_yard.coalRadarList
@@ -39,11 +38,14 @@ async def inventory_coal(coal_yard: CoalYard):
     radars = coal_yard.coalRadarList
     for radar in radars:
         radar_bytes_data = radar.bytes_buffer
-        radar_cloud_ndarray = bytes_cloud_data_rotated(bytes_data=radar_bytes_data, radar=radar)
+        radar_cloud_ndarray: numpy.ndarray = bytes_cloud_data_rotated(bytes_data=radar_bytes_data,
+                                                                      radar=radar)
         cloud_ndarray_list.append(radar_cloud_ndarray)
 
-    combined_cloud_ndarray = numpy.concatenate(cloud_ndarray_list, axis=0)
-    res_list = await split_and_calculate_volume(coal_yard=coal_yard, cloud_ndarray=combined_cloud_ndarray)
+    combined_cloud_ndarray: numpy.ndarray = numpy.concatenate(cloud_ndarray_list, axis=0)
+    res_list: List[InventoryCoalResult] = await split_and_calculate_volume(coal_yard=coal_yard,
+                                                                           cloud_ndarray=combined_cloud_ndarray)
+
     return res_list
 
 
@@ -84,7 +86,7 @@ def _callback(cid: c_uint, data_len: c_int, data, yard_id):
     return
 
 
-def radars_rotate_begin(radars, coal_yard):
+def radars_rotate_begin(radars: List[CoalRadar], coal_yard: CoalYard):
     bucket = coal_yard.conn_radarsBucket
     for radar in radars:
         if radar.id not in bucket:
@@ -108,8 +110,8 @@ def get_coal_yard_by_id(yard_id: int):
     return coal_yard
 
 
-async def split_and_calculate_volume(coal_yard, cloud_ndarray: numpy.ndarray):
-    res_list = list()  # 设置一个空字典，接收煤堆对象
+async def split_and_calculate_volume(coal_yard: CoalYard, cloud_ndarray: numpy.ndarray):
+    res_list: List[InventoryCoalResult] = list()  # 设置一个空字典，接收煤堆对象
     time_stamp = str(time.strftime("%m%d%H%M%S"))  # 设置时间戳，标记文件生成时间
 
     # 判断yard_name 文件夹是否存在，不存在创建
@@ -178,21 +180,6 @@ def euler_rotate(cloud_ndarray: numpy.ndarray, radar: CoalRadar):
 
     new_cloud_array.astype(np.float16)
     return new_cloud_array
-
-
-def put_cloud(filepath: str, filename: str):
-    object_name = 'cloud_date/' + time.strftime("%Y/%m/%d/") + filename
-    # inventory-coal/cloud_date/2022/06/14/a.txt
-    minio_conf = settings.MINIO_CONF
-    minio_client = minio.Minio(**minio_conf)
-    minio_client.fput_object(bucket_name='inventory-coal',
-                             object_name=object_name,
-                             file_path=filepath,
-                             content_type="application/csv")
-
-    minio_path = "http://" + minio_conf['endpoint'] + '/inventory-coal/' + object_name
-    print("minio_path == ", minio_path)
-    return minio_path
 
 
 def bytes_cloud_data_rotated(bytes_data: bytes, radar: CoalRadar):
