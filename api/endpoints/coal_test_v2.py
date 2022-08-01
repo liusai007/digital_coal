@@ -140,7 +140,7 @@ async def split_and_calculate_volume(coal_yard, cloud_ndarray: numpy.ndarray):
     return res_list
 
 
-def euler_rotate(cloud_ndarray: numpy.ndarray, radar: CoalRadar, save_path=None):
+def euler_rotate(cloud_ndarray: numpy.ndarray, radar: CoalRadar):
     axis_x = [1, 0, 0]
     axis_y = [0, 1, 0]
     axis_z = [0, 0, 1]
@@ -162,8 +162,6 @@ def euler_rotate(cloud_ndarray: numpy.ndarray, radar: CoalRadar, save_path=None)
     new_cloud_array = rotate_cloud_array + shift_xyz
 
     new_cloud_array.astype(np.float16)
-    # np.savetxt(save_path, new_cloud_array, fmt='%d')
-    # print("我要保证在前面 id==", radar.id)
     return new_cloud_array
 
 
