@@ -22,22 +22,18 @@ router = APIRouter()
 async def inventory_coal(coal_yard: CoalYard):
     yard_id = id(coal_yard)
     cloud_ndarray_list = list()
-    coal_yard.conn_radarsBucket = list()
+    set_callback_function(func=_callback, obj_id=yard_id)
 
     radars = coal_yard.coalRadarList
-    for radar in radars:
-        radar.bytes_buffer = b''
-        # radar.__setattr__('bytes_buffer', b'')
-
-    set_callback_function(func=_callback, obj_id=yard_id)
     radars_start_connect(radars=radars)
+
     await asyncio.sleep(2)
     begin_response = radars_rotate_begin(radars=radars, coal_yard=coal_yard)
     if begin_response is False:
         return fail(msg="存在未连接成功的雷达，启动失败！")
 
     # 代表全部雷达停止的判断条件
-    while coal_yard.conn_radarsBucket == 0:
+    while len(coal_yard.conn_radarsBucket) == 0:
         radars = coal_yard.coalRadarList
         for radar in radars:
             radar_bytes_data = radar.bytes_buffer
@@ -50,27 +46,25 @@ async def inventory_coal(coal_yard: CoalYard):
 
 
 def _callback(cid: c_uint, data_len: c_int, data, yard_id):
+    coal_yard: CoalYard = get_coal_yard_by_id(yard_id=yard_id)
+    bucket = coal_yard.conn_radarsBucket
+
     code = int.from_bytes(data[2:4], byteorder='little', signed=True)
 
     if code == 3534:
         print("雷达连接成功, cid ==", cid)
         # 根据yard_id获取coal_yard对象
-        coal_yard: CoalYard = get_coal_yard_by_id(yard_id=yard_id)
-        bucket = coal_yard.conn_radarsBucket
         if cid not in bucket:
             bucket.append(cid)
         # RADARS_BUCKET.append(cid)
     elif code == 3535:
         print("连接失败")
-        coal_yard = get_coal_yard_by_id(yard_id=yard_id)
-        bucket = coal_yard.conn_radarsBucket
         if cid in bucket:
             bucket.remove(cid)
     elif code == 51108:
         print("运行模式设置成功")
     elif code == 118:
         points_data = data[54:data_len]
-        coal_yard = get_coal_yard_by_id(yard_id=yard_id)
 
         radars = coal_yard.coalRadarList
         for radar in radars:
@@ -81,8 +75,6 @@ def _callback(cid: c_uint, data_len: c_int, data, yard_id):
         if last_line_flag == b'\x80':
             # radar_stop 函数停止并关闭雷达连接，同时在RADAR_BUCKET中删除雷达id
             radar_stop(c_id=cid)
-            coal_yard = get_coal_yard_by_id(yard_id=yard_id)
-            bucket = coal_yard.conn_radarsBucket
             if cid in bucket:
                 bucket.remove(cid)
     else:

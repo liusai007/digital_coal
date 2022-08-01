@@ -16,7 +16,7 @@ class CoalRadar(BaseModel):
     rotateX: float
     rotateY: float
     rotateZ: float
-    bytes_buffer: bytes = None
+    bytes_buffer: bytes = bytes()
 
 
 class HeapPoint(BaseModel):
@@ -37,7 +37,7 @@ class CoalYard(BaseModel):
     coalYardName: str
     coalRadarList: List[CoalRadar] = None
     coalHeapList: List[CoalHeap]
-    conn_radarsBucket: list = None
+    conn_radarsBucket: list = []
 
 
 class InventoryCoalResult:
