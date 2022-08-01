@@ -7,6 +7,7 @@ import io
 import time
 import minio
 import asyncio
+from core.Response import *
 from fastapi import APIRouter
 from methods.radar_func import *
 from methods.put_cloud import put_cloud_to_minio
@@ -26,12 +27,14 @@ async def inventory_coal(coal_yard: CoalYard):
     radars = coal_yard.coalRadarList
     for radar in radars:
         radar.bytes_buffer = b''
-        radar.__setattr__('bytes_buffer', b'')
+        # radar.__setattr__('bytes_buffer', b'')
 
     set_callback_function(func=_callback, ws_id=yard_id)
     radars_start_connect(radars=radars)
     await asyncio.sleep(2)
-    radars_rotate_begin(radars=radars, websocket=coal_yard)
+    begin_response = radars_rotate_begin(radars=radars, coal_yard=coal_yard)
+    if begin_response is False:
+        return fail(msg="存在未连接成功的雷达，启动失败！")
 
     # 代表全部雷达停止的判断条件
     while coal_yard.conn_radarsBucket == 0:
@@ -85,6 +88,24 @@ def _callback(cid: c_uint, data_len: c_int, data, yard_id):
     else:
         print('其他未知码 == ', code)
     return
+
+
+def radars_rotate_begin(radars, coal_yard):
+    bucket = coal_yard.conn_radarsBucket
+    for radar in radars:
+        if radar.id not in bucket:
+            return False
+
+    # await websocket.send_text('开始盘煤')
+    for radar in radars:
+        cid = radar.id
+        if cid not in RADARS_BUCKET:
+            RADARS_BUCKET.append(cid)
+        dll.NET_SDK_SIMCLT_ZTRD_SetRunMode(cid, RunMode, 64, 0, 360)
+        dll.NET_SDK_SIMCLT_ZTRD_RotateStop(cid)
+        dll.NET_SDK_SIMCLT_ZTRD_RotateBegin(cid, Speed, 0, AngleSceneScan)
+
+    return True
 
 
 # 输入coal_yard的id值，返回一个 coal_yard 对象
