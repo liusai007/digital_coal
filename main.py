@@ -129,6 +129,7 @@ manager = ConnectionManager()
 @application.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
     await manager.connect(websocket)
+    await websocket.send_text('Websocket已连接成功，正在等待用户指令！')
     ws_id = id(websocket)
     client_id = websocket.query_params['clientId']
     # 设置回调函数，将 websocket 内存地址作为参数，传入回调中
@@ -138,10 +139,10 @@ async def websocket_endpoint(websocket: WebSocket):
             data = await websocket.receive_text()
             yard_id = websocket.query_params['coalYardId']
             if data == 'start':
+                await websocket.send_text("正在通过指令进行传输，请稍后...")
                 # base_url = settings.PATH_ID.BASEURL
                 # url = base_url + '/coal/coalYard/realTime/coalYardInfo?coalYardId=' + str(yard_id)
                 # response = requests.get(url).json()
-
                 # DictOBj将一个dict转化为一个对象，方便以属性的方式访问
                 # coal_yard_dict = response['data']
                 coal_yard_obj = DictObj(coal_yard_dict)
@@ -170,7 +171,7 @@ async def websocket_endpoint(websocket: WebSocket):
                         continue
                 # await start(ws_id=ws_id)
             else:
-                await websocket.send_text(data='消息无法识别')
+                await websocket.send_text(data='输入的指令暂时无法识别，请联系管理员')
                 continue
 
             # 发送长度为3000的数据帧，n代表一次发送的数据长度
@@ -210,7 +211,6 @@ async def split_and_calculate_volume(coal_yard, cloud_ndarray: numpy.ndarray):
 
     # 遍历获取单个煤堆信息，并进行计算体积操作
     heaps = coal_yard.coalHeapList
-    print('heladlfa')
     for heap in heaps:
         res = InventoryCoalResult()
         res.coalHeapId = heap.coalHeapId

@@ -3,15 +3,17 @@ html = """
 <!DOCTYPE html>
 <html>
     <head>
-        <title>Chat</title>
+        <title>Websocket Real Time Push</title>
     </head>
     <body>
-        <h1>WebSocket Chat</h1>
-        <h2>Your ID: <span id="ws-id"></span></h2>
+        <h1>Real Time Push</h1>
+        <h2>Your Websocket ID: <span id="ws-id"></span></h2>
         <form action="" onsubmit="sendMessage(event)">
             <input type="text" id="messageText" autocomplete="off"/>
-            <button>Send</button>
+            <button>Get Real Time Data</button>
         </form>
+        <h2>Please enter "start" and click the button</h2>
+        <h2>The ID of websocket will change randomly, and each ID corresponds to different client data</h2>
         <ul id='messages'>
         </ul>
         <script>

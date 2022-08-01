@@ -51,7 +51,6 @@ async def inventory_coal(coal_yard: CoalYard = None):
 
     # 遍历获取单个煤堆信息，并进行计算体积操作
     heaps = coal_yard.coalHeapList
-    print('heladlfa')
     for heap in heaps:
         res = InventoryCoalResult()
         res.coalHeapId = heap.coalHeapId
