@@ -1,12 +1,9 @@
-import os
 import math
 import numpy
 import platform
 import numpy as np
 from ctypes import *
-from io import BytesIO
 from config import settings
-from pandas import DataFrame
 from datetime import datetime
 import scipy.linalg as linalg
 from models.custom_class import *
@@ -44,24 +41,20 @@ else:
 
 
 def radar_callback(cid: c_uint, datalen: c_int, data, ws_id):
-    # print("回调中的线程名 ===========", threading.current_thread().name)
+    websocket = get_websocket_by_wsid(ws_id=ws_id)
+    bucket = websocket.conn_radarsBucket
+
     code = int.from_bytes(data[2:4], byteorder='little', signed=True)
 
     if code == 3534:
         print("雷达连接成功, cid ==", cid)
-        websocket = get_websocket_by_wsid(ws_id=ws_id)
-        bucket = websocket.conn_radarsBucket
         if cid not in bucket:
             bucket.append(cid)
         # RADARS_BUCKET.append(cid)
     elif code == 3535:
         print("连接失败")
-        websocket = get_websocket_by_wsid(ws_id=ws_id)
-        bucket = websocket.conn_radarsBucket
         if cid in bucket:
             bucket.remove(cid)
-        # dll.NET_SDK_SIMCLT_ZTRD_RotateStop(cid)
-        # dll.NET_SDK_SIMCLT_StopConnectCid(cid)
     elif code == 51108:
         print("运行模式设置成功")
     elif code == 118:
@@ -82,9 +75,7 @@ def radar_callback(cid: c_uint, datalen: c_int, data, ws_id):
         if last_line_flag == b'\x80':
             # radar_stop 函数停止并关闭雷达连接，同时在RADAR_BUCKET中删除雷达id
             radar_stop(c_id=cid)
-            # 根据ws_id获取websocket对象，并在此对象的属性bucket中删除雷达id
-            websocket = get_websocket_by_wsid(ws_id=ws_id)
-            bucket = websocket.conn_radarsBucket
+            # websocket对象的属性bucket中删除雷达id
             if cid in bucket:
                 bucket.remove(cid)
     else:
