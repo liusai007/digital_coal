@@ -20,11 +20,10 @@ AngleSceneScan = settings.RADAR.ANGLESCENESCAN
 
 ALL_DATA = list()
 BYTES_IO = BytesIO()
-RADARS_BUCKET = list()  # 用于存储已经启动并且未停止的雷达
-COAL_YARD_LIST: list = []
 WEBSOCKET_CLIENTS = list()
 gCallbackFuncList = list()  # 定义全局列表接收回调，防止系统回收
 callback_time = datetime.now()
+RUNNING_RADARS_BUCKET = list()  # 用于存储已经启动并且未停止的雷达
 pool = ThreadPoolExecutor(5)  # 不指定数字默认为 cpu_count（CPU数量） + 4
 # 上面的代码执行之后就会立刻创建五个等待工作的线程
 
@@ -198,7 +197,7 @@ def is_every_radar_stop(radars):
     # 判断参数中的雷达是否全部停止，如果存在未停止的雷达，则返回 false
     flag = True
     for radar in radars:
-        if radar.id in RADARS_BUCKET:
+        if radar.id in RUNNING_RADARS_BUCKET:
             flag = False
     return flag
 
@@ -211,8 +210,8 @@ def get_websocket_by_wsid(ws_id: int):
 
 def radar_stop(c_id):
     dll.NET_SDK_SIMCLT_ZTRD_RotateStop(c_id)
-    if c_id in RADARS_BUCKET:
-        RADARS_BUCKET.remove(c_id)
+    if c_id in RUNNING_RADARS_BUCKET:
+        RUNNING_RADARS_BUCKET.remove(c_id)
     dll.NET_SDK_SIMCLT_StopConnectCid(c_id)
 
 
@@ -225,8 +224,8 @@ def radars_rotate_begin(radars, websocket):
     # await websocket.send_text('开始盘煤')
     for radar in radars:
         cid = radar.id
-        if cid not in RADARS_BUCKET:
-            RADARS_BUCKET.append(cid)
+        if cid not in RUNNING_RADARS_BUCKET:
+            RUNNING_RADARS_BUCKET.append(cid)
         dll.NET_SDK_SIMCLT_ZTRD_SetRunMode(cid, RunMode, 64, 0, 360)
         dll.NET_SDK_SIMCLT_ZTRD_RotateStop(cid)
         dll.NET_SDK_SIMCLT_ZTRD_RotateBegin(cid, Speed, 0, AngleSceneScan)

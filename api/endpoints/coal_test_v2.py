@@ -15,10 +15,14 @@ from methods.get_vom_and_maxheight import heap_vom_and_maxheight
 from models.custom_class import CoalYard, CoalRadar, InventoryCoalResult
 
 router = APIRouter()
+coal_yard: CoalYard
 
 
 @router.post("/coal_test_v2", summary="标准测试版")
-async def inventory_coal(coal_yard: CoalYard):
+async def inventory_coal(my_yard: CoalYard):
+    global coal_yard
+    coal_yard = my_yard
+    # 根据煤场id无法在回调中获取coal_yard对象，设置全局coal_yard
     yard_id = id(coal_yard)
     cloud_ndarray_list: List[numpy.ndarray] = list()
     set_callback_function(func=_callback, obj_id=yard_id)
@@ -27,7 +31,7 @@ async def inventory_coal(coal_yard: CoalYard):
     radars_start_connect(radars=radars)
 
     await asyncio.sleep(2)
-    begin_response = radars_rotate_begin(radars=radars, coal_yard=coal_yard)
+    begin_response = radars_rotate_begin(radars=radars, auto_yard=coal_yard)
     if begin_response is False:
         return fail(msg="存在未连接成功的雷达，启动失败！")
 
@@ -43,21 +47,20 @@ async def inventory_coal(coal_yard: CoalYard):
         cloud_ndarray_list.append(radar_cloud_ndarray)
 
     combined_cloud_ndarray: numpy.ndarray = numpy.concatenate(cloud_ndarray_list, axis=0)
-    res_list: List[InventoryCoalResult] = await split_and_calculate_volume(coal_yard=coal_yard,
+    res_list: List[InventoryCoalResult] = await split_and_calculate_volume(auto_yard=coal_yard,
                                                                            cloud_ndarray=combined_cloud_ndarray)
 
     return res_list
 
 
 def _callback(cid: c_uint, data_len: c_int, data, yard_id):
-    coal_yard: CoalYard = get_coal_yard_by_id(yard_id=yard_id)
+    # 根据煤场id无法获取对象，设置全局 coal_yard
+    # auto_yard = get_coal_yard_by_id(yard_id=yard_id)
     bucket = coal_yard.conn_radarsBucket
-
     code = int.from_bytes(data[2:4], byteorder='little', signed=True)
 
     if code == 3534:
         print("雷达连接成功, cid ==", cid)
-        # 根据yard_id获取coal_yard对象
         if cid not in bucket:
             bucket.append(cid)
         # RADARS_BUCKET.append(cid)
@@ -68,11 +71,12 @@ def _callback(cid: c_uint, data_len: c_int, data, yard_id):
     elif code == 51108:
         print("运行模式设置成功")
     elif code == 118:
-        points_data = data[54:data_len]
+        points_data: bytes = data[54:data_len]
 
         radars = coal_yard.coalRadarList
         for radar in radars:
             if radar.id == cid:
+                # 点云数据(bytes类型)循环写入对应radar的属性bytes_buffer中
                 radar.bytes_buffer += points_data
 
         last_line_flag = data[44]
@@ -86,8 +90,8 @@ def _callback(cid: c_uint, data_len: c_int, data, yard_id):
     return
 
 
-def radars_rotate_begin(radars: List[CoalRadar], coal_yard: CoalYard):
-    bucket = coal_yard.conn_radarsBucket
+def radars_rotate_begin(radars: List[CoalRadar], auto_yard: CoalYard):
+    bucket = auto_yard.conn_radarsBucket
     for radar in radars:
         if radar.id not in bucket:
             return False
@@ -95,8 +99,8 @@ def radars_rotate_begin(radars: List[CoalRadar], coal_yard: CoalYard):
     # await websocket.send_text('开始盘煤')
     for radar in radars:
         cid = radar.id
-        if cid not in RADARS_BUCKET:
-            RADARS_BUCKET.append(cid)
+        if cid not in RUNNING_RADARS_BUCKET:
+            RUNNING_RADARS_BUCKET.append(cid)
         dll.NET_SDK_SIMCLT_ZTRD_SetRunMode(cid, RunMode, 64, 0, 360)
         dll.NET_SDK_SIMCLT_ZTRD_RotateStop(cid)
         dll.NET_SDK_SIMCLT_ZTRD_RotateBegin(cid, Speed, 0, AngleSceneScan)
@@ -104,18 +108,18 @@ def radars_rotate_begin(radars: List[CoalRadar], coal_yard: CoalYard):
     return True
 
 
-# 输入coal_yard的id值，返回一个 coal_yard 对象
+# 输入自定义对象的id值，返回一个 object 对象
 def get_coal_yard_by_id(yard_id: int):
-    coal_yard: CoalYard = cast(yard_id, py_object).value
-    return coal_yard
+    custom_object = cast(yard_id, py_object).value
+    return custom_object
 
 
-async def split_and_calculate_volume(coal_yard: CoalYard, cloud_ndarray: numpy.ndarray):
+async def split_and_calculate_volume(auto_yard: CoalYard, cloud_ndarray: numpy.ndarray):
     res_list: List[InventoryCoalResult] = list()  # 设置一个空字典，接收煤堆对象
     time_stamp = str(time.strftime("%m%d%H%M%S"))  # 设置时间戳，标记文件生成时间
 
     # 判断yard_name 文件夹是否存在，不存在创建
-    coal_yard_directory = settings.DATA_PATH + '/' + coal_yard.coalYardName
+    coal_yard_directory = settings.DATA_PATH + '/' + auto_yard.coalYardName
     if not os.path.exists(coal_yard_directory):
         os.makedirs(coal_yard_directory)
 
