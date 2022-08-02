@@ -111,7 +111,7 @@ def bytes_cloud_frame_rotated(kwargs: dict):
     #     os.makedirs(FRAME_DATA_PATH)
 
     points_data = kwargs['data']
-    cloud_ndarray = np.frombuffer(points_data, dtype=np.int16).reshape(-1, 3)
+    cloud_ndarray: numpy.ndarray = np.frombuffer(points_data, dtype=np.int16).reshape(-1, 3)
 
     cid = kwargs['cid']
     radars = coal_yard.coalRadarList
@@ -129,7 +129,8 @@ def bytes_cloud_frame_rotated(kwargs: dict):
             # new_cloud: numpy.ndarray = rotated_radar_cloud_ndarray.reshape(-1, 3)
             # new_cloud: numpy.ndarray = new_cloud[:, 1:4]
             new_cloud_list = rotated_radar_cloud_ndarray.tolist()
-            list_buffer.append(new_cloud_list)
+            # list_buffer.append(new_cloud_list)
+            list_buffer.extend(new_cloud_list)
             # await websocket.send_text(str(new_cloud_list))
 
             # save_path = FRAME_DATA_PATH + '/radar_' + str(cid) + '_cloudData_' + str(time_now) + ".txt"
