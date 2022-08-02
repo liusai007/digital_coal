@@ -43,7 +43,7 @@ else:
 def radar_callback(cid: c_uint, datalen: c_int, data, ws_id):
     websocket = get_websocket_by_wsid(ws_id=ws_id)
     bucket = websocket.conn_radarsBucket
-
+    print(f'bucket ===== {bucket}')
     code = int.from_bytes(data[2:4], byteorder='little', signed=True)
 
     if code == 3534:

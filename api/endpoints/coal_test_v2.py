@@ -6,6 +6,7 @@
 import os
 import io
 import time
+import ctypes
 import asyncio
 from core.Response import *
 from fastapi import APIRouter
@@ -16,12 +17,12 @@ from methods.get_vom_and_maxheight import heap_vom_and_maxheight
 from models.custom_class import CoalYard, CoalRadar, InventoryCoalResult
 
 router = APIRouter()
-coal_yard: CoalYard
+# coal_yard: CoalYard
 
 
 @router.post("/coal_test_v2", summary="标准测试版")
 async def inventory_coal(my_yard: CoalYard):
-    global coal_yard
+    # global coal_yard
     coal_yard = my_yard
     # 根据煤场id无法在回调中获取coal_yard对象，设置全局coal_yard
     yard_id = id(coal_yard)
@@ -56,8 +57,10 @@ async def inventory_coal(my_yard: CoalYard):
 
 def _callback(cid: c_uint, data_len: c_int, data, yard_id):
     # 根据煤场id无法获取对象，设置全局 coal_yard
-    # auto_yard = get_coal_yard_by_id(yard_id=yard_id)
-    bucket = coal_yard.conn_radarsBucket
+    auto_yard = get_coal_yard_by_id(yard_id=yard_id)
+    print(f'yard_name ===== {auto_yard.coalYardName}')
+    bucket = auto_yard.conn_radarsBucket
+    # bucket = coal_yard.conn_radarsBucket
     code = int.from_bytes(data[2:4], byteorder='little', signed=True)
 
     if code == 3534:
@@ -111,7 +114,7 @@ def radars_rotate_begin(radars: List[CoalRadar], auto_yard: CoalYard):
 
 # 输入自定义对象的id值，返回一个 object 对象
 def get_coal_yard_by_id(yard_id: int):
-    custom_object = cast(yard_id, py_object).value
+    custom_object = ctypes.cast(yard_id, ctypes.py_object).value
     return custom_object
 
 
