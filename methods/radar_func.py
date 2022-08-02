@@ -43,7 +43,8 @@ else:
 def radar_callback(cid: c_uint, datalen: c_int, data, ws_id):
     websocket = get_websocket_by_wsid(ws_id=ws_id)
     bucket = websocket.conn_radarsBucket
-    print(f'bucket ===== {bucket}')
+    list_buffer = websocket.listBuffer
+    # print(f'bucket ===== {bucket}')
     code = int.from_bytes(data[2:4], byteorder='little', signed=True)
 
     if code == 3534:
@@ -69,7 +70,8 @@ def radar_callback(cid: c_uint, datalen: c_int, data, ws_id):
         kwargs = {'data': points_data, 'cid': cid, 'ws_id': ws_id}
         # pool.submit(bytes_cloud_frame_rotated, kwargs)
         # cloud_rotated_result = pool.submit(bytes_cloud_frame_rotated, bytes_frame).result()
-        bytes_cloud_frame_rotated(kwargs)
+        new_cloud_list = bytes_cloud_frame_rotated(kwargs)
+        list_buffer.extend(new_cloud_list)
 
         last_line_flag = data[44]
         if last_line_flag == b'\x80':
@@ -93,7 +95,7 @@ def bytes_cloud_frame_rotated(kwargs: dict):
     ws_id = kwargs['ws_id']
     websocket = get_websocket_by_wsid(ws_id=ws_id)
     coal_yard = websocket.coalYard
-    list_buffer = websocket.listBuffer
+    # list_buffer = websocket.listBuffer
 
     # bytes_frame = join_cid_to_bytes(point_bytes=points_data, cid=cid)
     # # # 判断yard_name 文件夹是否存在，不存在创建
@@ -121,7 +123,8 @@ def bytes_cloud_frame_rotated(kwargs: dict):
             # new_cloud: numpy.ndarray = new_cloud[:, 1:4]
             new_cloud_list = rotated_radar_cloud_ndarray.tolist()
             # list_buffer.append(new_cloud_list)
-            list_buffer.extend(new_cloud_list)
+            # list_buffer.extend(new_cloud_list)
+            return new_cloud_list
             # await websocket.send_text(str(new_cloud_list))
 
             # save_path = FRAME_DATA_PATH + '/radar_' + str(cid) + '_cloudData_' + str(time_now) + ".txt"

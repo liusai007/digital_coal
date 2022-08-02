@@ -9,7 +9,6 @@ import asyncio
 import requests
 from methods.radar_func import *
 from methods.volume_func import *
-from methods.coal_yard import coal_yard_dict
 from methods.send_data import send_frame_data
 from methods.radar_func import radar_callback
 from methods.put_cloud import put_cloud_to_minio
@@ -27,6 +26,7 @@ from starlette.middleware.sessions import SessionMiddleware
 from fastapi.openapi.docs import (get_redoc_html, get_swagger_ui_html, get_swagger_ui_oauth2_redirect_html)
 from config import settings
 from core import Events, Exceptions, Middleware, Router
+# from methods.coal_yard import coal_yard_dict  # 测试使用
 
 application = FastAPI(
     debug=settings.APP_DEBUG,
