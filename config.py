@@ -48,6 +48,7 @@ class Config(BaseSettings):
     }
     # 雷达参数配置
     RADAR = RadarConfig()
+    PATH_CONFIG = PathConfig()
     DATA_PATH = '/opt/python/coal_data'
     CLOUD_COMBINED_PATH = DATA_PATH + '/combined_cloud'
     CLOUD_SAMPLED_PATH = DATA_PATH + '/sampled_cloud'

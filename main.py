@@ -16,7 +16,7 @@ from methods.put_cloud import put_cloud_to_minio
 from methods.bounding_box_filter import bounding_box_filter
 from methods.get_vom_and_maxheight import heap_vom_and_maxheight
 from models.dict_obj import DictObj
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import WebSocket, WebSocketDisconnect
 from api.endpoints.ws import *
 from fastapi.responses import HTMLResponse
 from fastapi import FastAPI, HTTPException
@@ -140,11 +140,11 @@ async def websocket_endpoint(websocket: WebSocket):
             yard_id = websocket.query_params['coalYardId']
             if data == 'start':
                 await websocket.send_text("正在通过指令进行传输，请稍后...")
-                # base_url = settings.PATH_ID.BASEURL
-                # url = base_url + '/coal/coalYard/realTime/coalYardInfo?coalYardId=' + str(yard_id)
-                # response = requests.get(url).json()
+                base_url = settings.PATH_CONFIG.BASEURL
+                url = base_url + '/coal/coalYard/realTime/coalYardInfo?coalYardId=' + str(yard_id)
+                response = requests.get(url).json()
                 # DictOBj将一个dict转化为一个对象，方便以属性的方式访问
-                # coal_yard_dict = response['data']
+                coal_yard_dict = response['data']
                 coal_yard_obj = DictObj(coal_yard_dict)
                 # 这一步很重要: 给websocket添加煤场属性，值为煤场对象
                 websocket.coalYard = coal_yard_obj
