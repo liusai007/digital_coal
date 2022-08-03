@@ -43,17 +43,12 @@ async def heap_vom_and_maxheight(cloud_ndarray: numpy.ndarray, minio_path: str =
     f2.close()
 
     # 凸面计算体积
-    c_time = datetime.now()
-    # print(f"开始计算时间 ==========={c_time}")
     diamond = PyntCloud.from_file(ply_name)
     convex_hull_id = diamond.add_structure("convex_hull")
     convex_hull = diamond.structures[convex_hull_id]
     diamond.mesh = convex_hull.get_mesh()
     # diamond.to_file("bunny_hull.ply", also_save=["mesh"])
     volume = convex_hull.volume
-    cc_time = datetime.now()
-    # print(f"计算结束时间 ==========={cc_time}")
-    print(f"计算体积耗时 ============={cc_time - c_time}")
     # 三角剖分结束
     response = {'maxHeight': maxHeight, 'volume': volume}
     return response
