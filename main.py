@@ -13,7 +13,7 @@ from methods.send_data import send_frame_data
 from methods.radar_func import radar_callback
 from methods.put_cloud import put_cloud_to_minio
 from methods.bounding_box_filter import bounding_box_filter
-from methods.get_vom_and_maxheight import heap_vom_and_maxheight
+from methods.calculate_volume import heap_vom_and_maxheight
 from models.dict_obj import DictObj
 from fastapi import WebSocket, WebSocketDisconnect
 from api.endpoints.ws import *

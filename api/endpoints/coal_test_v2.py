@@ -13,7 +13,7 @@ from fastapi import APIRouter
 from methods.radar_func import *
 from methods.put_cloud import put_cloud_to_minio
 from methods.bounding_box_filter import bounding_box_filter
-from methods.get_vom_and_maxheight import heap_vom_and_maxheight
+from methods.calculate_volume import heap_vom_and_maxheight
 from models.custom_class import CoalYard, CoalRadar, InventoryCoalResult
 
 router = APIRouter()
