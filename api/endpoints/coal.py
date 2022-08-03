@@ -75,7 +75,7 @@ async def inventory_coal(coal_yard: CoalYard = None):
         vom_start = datetime.now()
         print("进入体积计算")
         sample_cloud_ndarray: numpy.ndarray = cloud_ndarray_sample(cloud_ndarray=split_cloud_ndarray,
-                                                                   n_x=200, n_y=200, n_z=100)
+                                                                   n_x=100, n_y=100, n_z=100)
         vom_and_maxheight = await heap_vom_and_maxheight(cloud_ndarray=sample_cloud_ndarray,
                                                          minio_path=minio_path)
         vom_end = datetime.now()

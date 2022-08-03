@@ -8,7 +8,7 @@ from pyntcloud import PyntCloud
 async def heap_vom_and_maxheight(cloud_ndarray: numpy.ndarray, minio_path: str = None):
     # cloud_ndarray = cloud_ndarray_sample(cloud_ndarray, n_x=200, n_y=200, n_z=100)
     # 三角剖分开始
-    if cloud_ndarray.__len__() < 500:
+    if cloud_ndarray.shape[0] < 500:
         return {'maxHeight': 0, 'volume': 0}
 
     u = cloud_ndarray[:, 0]
@@ -37,7 +37,7 @@ async def heap_vom_and_maxheight(cloud_ndarray: numpy.ndarray, minio_path: str =
     f2.write('property list uchar int vertex_indices\n')
     f2.write('end_header\n')
     for i in range(x.shape[0]):
-        f2.write('%d %d %d\n' % (x[i], y[i], z[i]))
+        f2.write('%.2f %.2f %.2f\n' % (x[i], y[i], z[i]))
     for vert in tri.simplices:
         f2.write('3 %d %d %d\n' % (vert[0], vert[1], vert[2]))
     f2.close()

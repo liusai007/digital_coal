@@ -116,7 +116,7 @@ def bytes_cloud_frame_rotated(kwargs: dict):
 
             div = np.array([100, 100, 100])
             radar_cloud_ndarray = np.divide(cloud_ndarray, div)
-            radar_cloud_ndarray.astype(np.float16)
+            # radar_cloud_ndarray = radar_cloud_ndarray.astype(np.float16)
 
             rotated_radar_cloud_ndarray: numpy.ndarray = euler_rotate(radar_cloud_ndarray, radar)
             # new_cloud: numpy.ndarray = rotated_radar_cloud_ndarray.reshape(-1, 3)
