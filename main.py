@@ -183,6 +183,8 @@ async def websocket_endpoint(websocket: WebSocket):
                 cloud_ndarray = numpy.array(cloud_list)
                 # 实现用于切割煤场并计算体积的功能
                 res_list = await split_and_calculate_volume(coal_yard=coal_yard_obj, cloud_ndarray=cloud_ndarray)
+            for i in res_list:
+                await websocket.send_text("煤堆：" + i.coalHeapName + "\n" + "体积：" + str(i.volume) + "\n" + "高度：" + str(i.maxHeight))
 
     except WebSocketDisconnect:
         manager.disconnect(websocket)
@@ -272,8 +274,6 @@ async def split_and_calculate_volume(coal_yard, cloud_ndarray: numpy.ndarray):
         split_cloud_ndarray: numpy.ndarray = bounding_box_filter(cloud_ndarray, heap.coalHeapArea)
         # numpy.savetxt(fname=minio_path, X=split_cloud_ndarray, fmt='%.2f', delimiter=' ')
 
-        list_cloud = split_cloud_ndarray.tolist()
-        bytes_cloud = bytes(str(list_cloud), encoding='utf-8')
 
         # 根据小点云文件(ndarray类型)计算体积和高度
         vom_start = datetime.now()
@@ -284,10 +284,14 @@ async def split_and_calculate_volume(coal_yard, cloud_ndarray: numpy.ndarray):
         res.maxHeight = vom_and_maxheight['maxHeight']
         print("%s 体积: %.2f，高度: %.2f" % (res.coalHeapName, res.volume, res.maxHeight))
 
+        list_cloud = split_cloud_ndarray.tolist()
+        bytes_cloud = bytes(str(list_cloud), encoding='utf-8')
         # 上传文件至 minio,返回minio文件路径
         # 例如："http://172.16.200.243:9000/inventory-coal/2022/05/24/1_20220510144243A001.txt"
-        data_buffer = io.BytesIO(bytes_cloud)
-        res.cloudInfo = await put_cloud_to_minio(f_name=minio_name, data=data_buffer, length=len(bytes_cloud))
+        print("list_cloud长度为" + str(len(list_cloud)))
+        if len(list_cloud) != 0:
+            data_buffer = io.BytesIO(bytes_cloud)
+            res.cloudInfo = put_cloud_to_minio(f_name=minio_name, data=data_buffer, length=len(bytes_cloud))
 
         # 煤堆信息对象保存至 list
         res_list.append(res)

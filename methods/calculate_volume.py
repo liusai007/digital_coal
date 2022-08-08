@@ -21,7 +21,7 @@ async def heap_vom_and_maxheight(cloud_ndarray: numpy.ndarray, minio_path: str =
 
     ply_name = minio_path.replace('.txt', '.ply')
     tri = Delaunay(np.array([u, v]).T)
-    f2 = open(ply_name, 'w')
+    f2 = open(ply_name, 'w', encoding='utf-8')
     f2.write('ply\n')
     f2.write('format ascii 1号雷达.0\n')
     f2.write('comment Created by CloudCompare v2.11.3 (Anoia)\n')

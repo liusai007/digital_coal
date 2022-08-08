@@ -92,8 +92,6 @@ def _callback(cid: c_uint, data_len: c_int, data, yard_id):
             if cid in bucket:
                 bucket.remove(cid)
                 print('删除雷达， cid ====================== ', cid)
-    else:
-        print('其他未知码 == ', code)
     return
 
 
@@ -108,11 +106,21 @@ def radars_rotate_begin(radars: List[CoalRadar], auto_yard: CoalYard):
         cid = radar.id
         # if cid not in RUNNING_RADARS_BUCKET:
         #     RUNNING_RADARS_BUCKET.append(cid)
-        dll.NET_SDK_SIMCLT_ZTRD_SetRunMode(cid, 0, 64, 0, 360)
-        dll.NET_SDK_SIMCLT_ZTRD_RotateStop(cid)
-        dll.NET_SDK_SIMCLT_ZTRD_RotateBegin(cid, 64, 0, 360)
-        res = dll.NET_SDK_SIMCLT_ZTRD_ReadtRunMode(cid)
-        print(f"运行模式    {cid} ========== {res}")
+        stopResult = dll.NET_SDK_SIMCLT_ZTRD_RotateStop(cid)
+        if stopResult:
+            print(str(cid) + "号雷达停止指令设置成功")
+        else:
+            print(str(cid) + "号雷达停止指令设置失败")
+        runModeResult = dll.NET_SDK_SIMCLT_ZTRD_SetRunMode(cid, c_short(0), c_short(64))
+        if runModeResult:
+            print(str(cid) + "号雷达模式指令设置成功")
+        else:
+            print(str(cid) + "号雷达模式指令设置失败")
+        beginResult = dll.NET_SDK_SIMCLT_ZTRD_RotateBegin(cid, 64, 0, 360)
+        if beginResult:
+            print(str(cid) + "号雷达开始指令设置成功")
+        else:
+            print(str(cid) + "号雷达开始指令设置失败")
     return True
 
 
@@ -187,7 +195,7 @@ def euler_rotate(cloud_ndarray: numpy.ndarray, radar: CoalRadar):
     rotate_cloud_array = np.dot(cloud_ndarray, matrix)
 
     # 点云平移操作
-    shift_xyz = np.array([[radar.shiftX, radar.shiftY, radar.shiftZ]])
+    shift_xyz = np.array([[round(radar.shiftX / 100, 2), round(radar.shiftY / 100, 2), round(radar.shiftZ / 100, 2)]])
     new_cloud_array = rotate_cloud_array + shift_xyz
 
     new_cloud_array.astype(np.float16)

@@ -40,12 +40,12 @@ radar_200.filename = 'radar_200.txt'
 radar_201 = CoalRadar()
 radar_201.axisX = 0.0
 radar_201.axisY = 0.0
-radar_201.rotateX = 0.0
-radar_201.rotateY = 0.0
-radar_201.rotateZ = 0.0
-radar_201.shiftX = 0
-radar_201.shiftY = 0
-radar_201.shiftZ = 0
+radar_201.rotateX = -14.5
+radar_201.rotateY = -5.8
+radar_201.rotateZ = -20.0
+radar_201.shiftX = 75.9
+radar_201.shiftY = -95.8
+radar_201.shiftZ = -17.0
 radar_201.filename = 'radar_201.txt'
 
 
