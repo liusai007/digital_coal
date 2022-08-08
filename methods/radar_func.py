@@ -8,7 +8,7 @@ from datetime import datetime
 import scipy.linalg as linalg
 from models.custom_class import *
 from concurrent.futures import ThreadPoolExecutor
-
+from decimal import *
 
 # 雷达参数设置
 RunMode = settings.RADAR.RUNMODE
@@ -40,49 +40,49 @@ else:
     dll.NET_SDK_SIMCLT_Init()
 
 
-def radar_callback(cid: c_uint, datalen: c_int, data, ws_id):
-    websocket = get_websocket_by_wsid(ws_id=ws_id)
-    bucket = websocket.conn_radarsBucket
-    list_buffer = websocket.listBuffer
-    # print(f'bucket ===== {bucket}')
-    code = int.from_bytes(data[2:4], byteorder='little', signed=True)
-
-    if code == 3534:
-        print("雷达连接成功, cid ==", cid)
-        if cid not in bucket:
-            bucket.append(cid)
-        # RADARS_BUCKET.append(cid)
-    elif code == 3535:
-        print("连接失败")
-        if cid in bucket:
-            bucket.remove(cid)
-    elif code == 51108:
-        print("运行模式设置成功")
-    elif code == 118:
-        global callback_time
-        callback_time = datetime.now()
-
-        points_data = data[54:datalen]
-        # bytes_frame = join_cid_to_bytes(point_bytes=points_data, cid=cid)
-        # bytes_frame代表一帧数据，总长是8的倍数(一个点占8个字节)
-
-        # 设置线程池，将帧数据进行转换计算
-        kwargs = {'data': points_data, 'cid': cid, 'ws_id': ws_id}
-        # pool.submit(bytes_cloud_frame_rotated, kwargs)
-        # cloud_rotated_result = pool.submit(bytes_cloud_frame_rotated, bytes_frame).result()
-        new_cloud_list = bytes_cloud_frame_rotated(kwargs)
-        list_buffer.extend(new_cloud_list)
-
-        last_line_flag = data[44]
-        if last_line_flag == b'\x80':
-            # radar_stop 函数停止并关闭雷达连接，同时在RADAR_BUCKET中删除雷达id
-            radar_stop(c_id=cid)
-            # websocket对象的属性bucket中删除雷达id
-            if cid in bucket:
-                bucket.remove(cid)
-    else:
-        print('其他未知码 == ', code)
-    return
+# def radar_callback(cid: c_uint, datalen: c_int, data, ws_id):
+#     websocket = get_websocket_by_wsid(ws_id=ws_id)
+#     bucket = websocket.conn_radarsBucket
+#     list_buffer = websocket.listBuffer
+#     # print(f'bucket ===== {bucket}')
+#     code = int.from_bytes(data[2:4], byteorder='little', signed=True)
+#
+#     if code == 3534:
+#         print("雷达连接成功, cid ==", cid)
+#         if cid not in bucket:
+#             bucket.append(cid)
+#         # RADARS_BUCKET.append(cid)
+#     elif code == 3535:
+#         print("连接失败")
+#         if cid in bucket:
+#             bucket.remove(cid)
+#     elif code == 51108:
+#         print("运行模式设置成功")
+#     elif code == 118:
+#         global callback_time
+#         callback_time = datetime.now()
+#
+#         points_data = data[54:datalen]
+#         # bytes_frame = join_cid_to_bytes(point_bytes=points_data, cid=cid)
+#         # bytes_frame代表一帧数据，总长是8的倍数(一个点占8个字节)
+#
+#         # 设置线程池，将帧数据进行转换计算
+#         kwargs = {'data': points_data, 'cid': cid, 'ws_id': ws_id}
+#         # pool.submit(bytes_cloud_frame_rotated, kwargs)
+#         # cloud_rotated_result = pool.submit(bytes_cloud_frame_rotated, bytes_frame).result()
+#         new_cloud_list = bytes_cloud_frame_rotated(kwargs)
+#         list_buffer.extend(new_cloud_list)
+#
+#         last_line_flag = data[44]
+#         if last_line_flag == b'\x80':
+#             # radar_stop 函数停止并关闭雷达连接，同时在RADAR_BUCKET中删除雷达id
+#             radar_stop(c_id=cid)
+#             # websocket对象的属性bucket中删除雷达id
+#             if cid in bucket:
+#                 bucket.remove(cid)
+#     else:
+#         print('其他未知码 == ', code)
+#     return
 
 
 def set_callback_function(func, obj_id):
@@ -115,6 +115,7 @@ def bytes_cloud_frame_rotated(kwargs: dict):
             #     radar_cloud_ndarray = radar_cloud_pdarray.values
 
             div = np.array([100, 100, 100])
+            # div = np.array([1, 1, 1])
             radar_cloud_ndarray = np.divide(cloud_ndarray, div)
             # radar_cloud_ndarray = radar_cloud_ndarray.astype(np.float16)
 
@@ -169,11 +170,12 @@ def euler_rotate(cloud_ndarray: numpy.ndarray, radar: CoalRadar, save_path=None)
     matrix = np.dot(x_matrix, np.dot(y_matrix, z_matrix))
     rotate_cloud_array = np.dot(cloud_ndarray, matrix)
 
+    s = Decimal('100')
     # 点云平移操作
-    shift_xyz = np.array([[radar.shiftX, radar.shiftY, radar.shiftZ]])
+    shift_xyz = np.array([[float(Decimal(radar.shiftX) / s), float(Decimal(radar.shiftY) / s), float(Decimal(radar.shiftZ) / s)]])
     new_cloud_array = rotate_cloud_array + shift_xyz
 
-    new_cloud_array.astype(np.float16)
+    # new_cloud_array.astype(np.float16)
     # np.savetxt(save_path, new_cloud_array, fmt='%d')
     # print("我要保证在前面 id==", radar.id)
     return new_cloud_array

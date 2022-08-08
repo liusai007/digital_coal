@@ -64,13 +64,14 @@ def _callback(cid: c_uint, data_len: c_int, data, yard_id):
 
     if code == 3534:
         print("雷达连接成功, cid ==", cid)
+        bucket = coal_yard.conn_radarsBucket
         if cid not in bucket:
             bucket.append(cid)
         # RADARS_BUCKET.append(cid)
     elif code == 3535:
         print("连接失败")
-        if cid in bucket:
-            bucket.remove(cid)
+        # if cid in bucket:
+        #     bucket.remove(cid)
     elif code == 51108:
         print("运行模式设置成功")
     elif code == 118:
@@ -84,10 +85,13 @@ def _callback(cid: c_uint, data_len: c_int, data, yard_id):
 
         last_line_flag = data[44]
         if last_line_flag == b'\x80':
+            print('雷达停止， cid ====================== ', cid)
             # radar_stop 函数停止并关闭雷达连接，同时在RADAR_BUCKET中删除雷达id
             radar_stop(c_id=cid)
+            bucket = coal_yard.conn_radarsBucket
             if cid in bucket:
                 bucket.remove(cid)
+                print('删除雷达， cid ====================== ', cid)
     else:
         print('其他未知码 == ', code)
     return
@@ -102,12 +106,13 @@ def radars_rotate_begin(radars: List[CoalRadar], auto_yard: CoalYard):
     # await websocket.send_text('开始盘煤')
     for radar in radars:
         cid = radar.id
-        if cid not in RUNNING_RADARS_BUCKET:
-            RUNNING_RADARS_BUCKET.append(cid)
-        dll.NET_SDK_SIMCLT_ZTRD_SetRunMode(cid, RunMode, 64, 0, 360)
+        # if cid not in RUNNING_RADARS_BUCKET:
+        #     RUNNING_RADARS_BUCKET.append(cid)
+        dll.NET_SDK_SIMCLT_ZTRD_SetRunMode(cid, 0, 64, 0, 360)
         dll.NET_SDK_SIMCLT_ZTRD_RotateStop(cid)
-        dll.NET_SDK_SIMCLT_ZTRD_RotateBegin(cid, Speed, 0, AngleSceneScan)
-
+        dll.NET_SDK_SIMCLT_ZTRD_RotateBegin(cid, 64, 0, 360)
+        res = dll.NET_SDK_SIMCLT_ZTRD_ReadtRunMode(cid)
+        print(f"运行模式    {cid} ========== {res}")
     return True
 
 

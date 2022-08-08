@@ -30,6 +30,8 @@ pip config list
 ```markdown
 pip install -r requirement.txt
 ```
+## 导出依赖包
+pip freeze > requirements.txt
 ## 项目目录
 ```text
 coal            #根目录

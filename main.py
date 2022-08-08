@@ -10,7 +10,7 @@ import requests
 from methods.radar_func import *
 from methods.volume_func import *
 from methods.send_data import send_frame_data
-from methods.radar_func import radar_callback
+# from methods.radar_func import radar_callback
 from methods.put_cloud import put_cloud_to_minio
 from methods.bounding_box_filter import bounding_box_filter
 from methods.calculate_volume import heap_vom_and_maxheight
@@ -26,7 +26,7 @@ from starlette.middleware.sessions import SessionMiddleware
 from fastapi.openapi.docs import (get_redoc_html, get_swagger_ui_html, get_swagger_ui_oauth2_redirect_html)
 from config import settings
 from core import Events, Exceptions, Middleware, Router
-# from methods.coal_yard import coal_yard_dict  # 测试使用
+from methods.coal_yard import coal_yard_dict  # 测试使用
 
 application = FastAPI(
     debug=settings.APP_DEBUG,
@@ -131,13 +131,15 @@ async def websocket_endpoint(websocket: WebSocket):
     await manager.connect(websocket)
     await websocket.send_text('Websocket已连接成功，正在等待用户指令！')
     ws_id = id(websocket)
+    websocket.list_buffer = list()
     client_id = websocket.query_params['clientId']
     # 设置回调函数，将 websocket 内存地址作为参数，传入回调中
     set_callback_function(func=radar_callback, obj_id=ws_id)
     try:
         while True:
             data = await websocket.receive_text()
-            yard_id = websocket.query_params['coalYardId']
+            # yard_id = websocket.query_params['coalYardId']
+            yard_id = 10
             if data == 'start':
                 await websocket.send_text("正在通过指令进行传输，请稍后...")
                 base_url = settings.PATH_CONFIG.BASEURL
@@ -163,8 +165,8 @@ async def websocket_endpoint(websocket: WebSocket):
                     await asyncio.sleep(2)
                     await websocket.send_text('开始盘煤')
                     # 设置空list用于在回调函数中保存雷达帧数据
-                    websocket.listBuffer = list()
-                    # websocket.__setattr__('listBuffer', list())
+                    # websocket.list_buffer = list()
+                    # websocket.__setattr__('list_buffer', list())
                     begin_response = radars_rotate_begin(radars, websocket)
                     if begin_response is False:
                         await websocket.send_text('存在未连接成功的雷达，操作中止......')
@@ -177,7 +179,7 @@ async def websocket_endpoint(websocket: WebSocket):
             # 发送长度为3000的数据帧，n代表一次发送的数据长度
             result = await send_frame_data(websocket, n=3000)
             if result == "success":
-                cloud_list = websocket.listBuffer
+                cloud_list = websocket.list_buffer
                 cloud_ndarray = numpy.array(cloud_list)
                 # 实现用于切割煤场并计算体积的功能
                 res_list = await split_and_calculate_volume(coal_yard=coal_yard_obj, cloud_ndarray=cloud_ndarray)
@@ -185,6 +187,51 @@ async def websocket_endpoint(websocket: WebSocket):
     except WebSocketDisconnect:
         manager.disconnect(websocket)
         await manager.broadcast(f"Client #{client_id} left the chat")
+
+
+def radar_callback(cid: c_uint, datalen: c_int, data, ws_id):
+    websocket = get_websocket_by_wsid(ws_id=ws_id)
+    bucket = websocket.conn_radarsBucket
+    list_buffer = websocket.list_buffer
+    # print(f'bucket ===== {bucket}')
+    code = int.from_bytes(data[2:4], byteorder='little', signed=True)
+
+    if code == 3534:
+        print("雷达连接成功, cid ==", cid)
+        if cid not in bucket:
+            bucket.append(cid)
+        # RADARS_BUCKET.append(cid)
+    elif code == 3535:
+        print("连接失败")
+        if cid in bucket:
+            bucket.remove(cid)
+    elif code == 51108:
+        print("运行模式设置成功")
+    elif code == 118:
+        global callback_time
+        callback_time = datetime.now()
+
+        points_data = data[54:datalen]
+        # bytes_frame = join_cid_to_bytes(point_bytes=points_data, cid=cid)
+        # bytes_frame代表一帧数据，总长是8的倍数(一个点占8个字节)
+
+        # 设置线程池，将帧数据进行转换计算
+        kwargs = {'data': points_data, 'cid': cid, 'ws_id': ws_id}
+        # pool.submit(bytes_cloud_frame_rotated, kwargs)
+        # cloud_rotated_result = pool.submit(bytes_cloud_frame_rotated, bytes_frame).result()
+        new_cloud_list = bytes_cloud_frame_rotated(kwargs)
+        list_buffer.extend(new_cloud_list)
+
+        last_line_flag = data[44]
+        if last_line_flag == b'\x80':
+            # radar_stop 函数停止并关闭雷达连接，同时在RADAR_BUCKET中删除雷达id
+            radar_stop(c_id=cid)
+            # websocket对象的属性bucket中删除雷达id
+            if cid in bucket:
+                bucket.remove(cid)
+    else:
+        print('其他未知码 == ', code)
+    return
 
 
 async def start(ws_id):
