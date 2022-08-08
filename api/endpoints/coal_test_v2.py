@@ -157,7 +157,7 @@ async def split_and_calculate_volume(cloud_ndarray: numpy.ndarray):
         # 上传文件至 minio,返回minio文件路径
         # 例如："http://172.16.200.243:9000/inventory-coal/2022/05/24/1_20220510144243A001.txt"
         data_buffer = io.BytesIO(bytes_cloud)
-        res.cloudInfo = await put_cloud_to_minio(f_name=minio_name, data=data_buffer, length=len(bytes_cloud))
+        res.cloudInfo = put_cloud_to_minio(f_name=minio_name, data=data_buffer, length=len(bytes_cloud))
 
         # 煤堆信息对象保存至 list
         res_list.append(res)
@@ -190,7 +190,7 @@ def euler_rotate(cloud_ndarray: numpy.ndarray, radar: CoalRadar):
 
 
 def bytes_cloud_data_rotated(bytes_data: bytes, radar: CoalRadar):
-    cloud_ndarray = np.frombuffer(bytes_data, dtype=np.int16).reshape(-1, 4)
+    cloud_ndarray = np.frombuffer(bytes_data, dtype=np.int16).reshape(-1, 3)
     div = np.array([100, 100, 100])
     radar_cloud_ndarray = np.divide(cloud_ndarray, div)
     radar_cloud_ndarray.astype(np.float16)
