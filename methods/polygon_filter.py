@@ -19,7 +19,7 @@ def isRayIntersectsSegment(poi, s_poi, e_poi):  # [x,y] [lng,lat]
     return True  # 排除上述情况之后
 
 
-def isPoiWithinPoly(poi, poly):
+def is_poi_within_polygon(poi, poly):
     # 输入：点，多边形三维数组
     # poly=[[x1,y1],[x2,y2],……,[xn,yn],[x1,y1]]二维数组
 

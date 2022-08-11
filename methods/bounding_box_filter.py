@@ -1,5 +1,4 @@
 import numpy
-from methods.polygon_filter import isPoiWithinPoly
 
 
 def bounding_box_filter(cloud_ndarray, heap_area):

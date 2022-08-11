@@ -13,9 +13,9 @@ class PathConfig(object):
     BASEURL: str = "http://172.16.200.239:9070/stage-api"
 
 
-class RadarConfig():
+class RadarConfig(object):
     RUNMODE: int = 0
-    SPEED: int = 64
+    SPEED: int = 30
     ANGLESCENESCAN: int = 360
 
 

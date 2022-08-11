@@ -231,8 +231,7 @@ def radar_callback(cid: c_uint, datalen: c_int, data, ws_id):
             # websocket对象的属性bucket中删除雷达id
             if cid in bucket:
                 bucket.remove(cid)
-    else:
-        print('其他未知码 == ', code)
+
     return
 
 
@@ -302,7 +301,7 @@ if __name__ == '__main__':
     import uvicorn
 
     uvicorn.run(app="main:application",
-                host='127.0.0.1',
+                host='0.0.0.0',
                 port=8000,
                 workers=1,
                 reload=True)

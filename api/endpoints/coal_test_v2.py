@@ -6,24 +6,31 @@
 import os
 import io
 import time
+import numpy
 import ctypes
 import asyncio
 from core.Response import *
 from fastapi import APIRouter
+from api.endpoints.coal import inventory_coal as inventory_coal_test
 from methods.radar_func import *
 from methods.put_cloud import put_cloud_to_minio
+from methods.polygon_filter import is_poi_within_polygon
 from methods.bounding_box_filter import bounding_box_filter
 from methods.calculate_volume import heap_vom_and_maxheight
 from models.custom_class import CoalYard, CoalRadar, InventoryCoalResult
 
 router = APIRouter()
 coal_yard: CoalYard
+polygon = [[8.0, 8.0], [420.0, 8.0], [420.0, 170.0], [8.0, 220.0], [8.0, 8.0]]
 
 
 @router.post("/coal_test_v2", summary="标准测试版")
 async def inventory_coal(auto_yard: CoalYard):
     global coal_yard
     coal_yard = auto_yard
+    # 判断煤场id, id=8 or 10,走模拟数据
+    if coal_yard.coalYardId == 8 or coal_yard.coalYardId == 10:
+        return await inventory_coal_test(coal_yard)
     # 根据煤场id无法在回调中获取coal_yard对象，设置全局coal_yard
     yard_id = id(coal_yard)
     cloud_ndarray_list: List[numpy.ndarray] = list()
@@ -32,7 +39,7 @@ async def inventory_coal(auto_yard: CoalYard):
     radars = coal_yard.coalRadarList
     radars_start_connect(radars=radars)
 
-    await asyncio.sleep(2)
+    await asyncio.sleep(1)
     begin_response = radars_rotate_begin(radars=radars, auto_yard=coal_yard)
     if begin_response is False:
         return fail(msg="存在未连接成功的雷达，启动失败！")
@@ -44,14 +51,20 @@ async def inventory_coal(auto_yard: CoalYard):
     radars = coal_yard.coalRadarList
     for radar in radars:
         radar_bytes_data = radar.bytes_buffer
-        radar_cloud_ndarray: numpy.ndarray = bytes_cloud_data_rotated(bytes_data=radar_bytes_data,
-                                                                      radar=radar)
+        radar_cloud_ndarray: numpy.ndarray = bytes_cloud_data_rotate_and_shift(bytes_data=radar_bytes_data,
+                                                                               radar=radar)
         cloud_ndarray_list.append(radar_cloud_ndarray)
 
     combined_cloud_ndarray: numpy.ndarray = numpy.concatenate(cloud_ndarray_list, axis=0)
-    res_list: List[InventoryCoalResult] = await split_and_calculate_volume(cloud_ndarray=combined_cloud_ndarray)
 
-    return res_list
+    # 去除棚顶和多边形切割操作
+    new_cloud: numpy.ndarray = remove_cover_and_bottom(combined_cloud_ndarray, cover=12.0, bottom=-1.0)
+    new_cloud: numpy.ndarray = remove_out_polygon_point(new_cloud, poly=polygon)
+    np.savetxt(fname='combined_cloud.txt', X=new_cloud, fmt='%.5f', delimiter=' ')
+
+    res_list: List[InventoryCoalResult] = await split_and_calculate_volume(cloud_ndarray=new_cloud)
+
+    return success(data=res_list)
 
 
 def _callback(cid: c_uint, data_len: c_int, data, yard_id):
@@ -111,12 +124,12 @@ def radars_rotate_begin(radars: List[CoalRadar], auto_yard: CoalYard):
             print(str(cid) + "号雷达停止指令设置成功")
         else:
             print(str(cid) + "号雷达停止指令设置失败")
-        runModeResult = dll.NET_SDK_SIMCLT_ZTRD_SetRunMode(cid, c_short(0), c_short(64))
+        runModeResult = dll.NET_SDK_SIMCLT_ZTRD_SetRunMode(cid, RunMode, Speed, 0, AngleSceneScan)
         if runModeResult:
             print(str(cid) + "号雷达模式指令设置成功")
         else:
             print(str(cid) + "号雷达模式指令设置失败")
-        beginResult = dll.NET_SDK_SIMCLT_ZTRD_RotateBegin(cid, 64, 0, 360)
+        beginResult = dll.NET_SDK_SIMCLT_ZTRD_RotateBegin(cid, Speed, 0, AngleSceneScan)
         if beginResult:
             print(str(cid) + "号雷达开始指令设置成功")
         else:
@@ -195,21 +208,29 @@ def euler_rotate(cloud_ndarray: numpy.ndarray, radar: CoalRadar):
     rotate_cloud_array = np.dot(cloud_ndarray, matrix)
 
     # 点云平移操作
-    shift_xyz = np.array([[round(radar.shiftX / 100, 2), round(radar.shiftY / 100, 2), round(radar.shiftZ / 100, 2)]])
-    new_cloud_array = rotate_cloud_array + shift_xyz
+    # shift_xyz = np.array([[radar.shiftX / 100, radar.shiftY / 100, radar.shiftZ / 100]])
+    # new_cloud_array = rotate_cloud_array + shift_xyz
+    #
+    # new_cloud_array.astype(np.float16)
+    return rotate_cloud_array
 
-    new_cloud_array.astype(np.float16)
-    return new_cloud_array
 
-
-def bytes_cloud_data_rotated(bytes_data: bytes, radar: CoalRadar):
+def bytes_cloud_data_rotate_and_shift(bytes_data: bytes, radar: CoalRadar):
     cloud_ndarray = np.frombuffer(bytes_data, dtype=np.int16).reshape(-1, 3)
     div = np.array([100, 100, 100])
     radar_cloud_ndarray = np.divide(cloud_ndarray, div)
     radar_cloud_ndarray.astype(np.float16)
 
     rotated_radar_cloud_ndarray = euler_rotate(radar_cloud_ndarray, radar=radar)
-    return rotated_radar_cloud_ndarray
+    rotated_radar_cloud_ndarray = rotated_radar_cloud_ndarray.astype(np.float32)
+
+    # 点云平移操作
+    shift_xyz = np.array([radar.shiftX, radar.shiftY, radar.shiftZ])
+    new_cloud_array = rotated_radar_cloud_ndarray + shift_xyz
+    # 点云乘以-1，适应3d煤场区域
+    new_cloud_array = new_cloud_array * numpy.array([[-1, 1, 1]])
+
+    return new_cloud_array
 
     # save_path = FRAME_DATA_PATH + '/radar_' + str(cid) + '_cloudData_' + str(time_now) + ".txt"
     # np.savetxt(fname=save_path, X=rotated_radar_cloud_ndarray, fmt='%.2f', delimiter=' ')
@@ -217,3 +238,23 @@ def bytes_cloud_data_rotated(bytes_data: bytes, radar: CoalRadar):
     # return rotated_radar_cloud_ndarray
     # len_array = rotated_radar_cloud_ndarray.__len__()
     # all_cloud_list.append(rotated_radar_cloud_ndarray)
+
+
+def remove_cover_and_bottom(cloud: numpy.ndarray, cover: float = 12.0, bottom: float = -1.0):
+    # 去除弧顶
+    max_z = cloud[:, 2] < cover
+    min_z = cloud[:, 2] > bottom
+    cloud = cloud[min_z & max_z]
+    return cloud
+
+
+def remove_out_polygon_point(cloud: numpy.ndarray, poly: list):
+    new_list = []
+    rows = cloud.shape[0]
+    for row in range(rows):
+        poi = cloud[row][0:2].tolist()
+        if is_poi_within_polygon(poi, poly):
+            a_list = cloud[row]
+            new_list.append(a_list)
+    new_array = numpy.array(new_list)
+    return new_array

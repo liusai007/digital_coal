@@ -1,4 +1,6 @@
 import math
+import time
+
 import numpy
 import platform
 import numpy as np
@@ -223,8 +225,8 @@ def radars_rotate_begin(radars, websocket):
         cid = radar.id
         if cid not in RUNNING_RADARS_BUCKET:
             RUNNING_RADARS_BUCKET.append(cid)
-        dll.NET_SDK_SIMCLT_ZTRD_SetRunMode(cid, RunMode, 64, 0, 360)
         dll.NET_SDK_SIMCLT_ZTRD_RotateStop(cid)
+        dll.NET_SDK_SIMCLT_ZTRD_SetRunMode(cid, RunMode, 64, 0, 360)
         dll.NET_SDK_SIMCLT_ZTRD_RotateBegin(cid, Speed, 0, AngleSceneScan)
 
     return True
