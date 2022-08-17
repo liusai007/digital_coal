@@ -8,7 +8,7 @@ from pandas import DataFrame
 from pyntcloud import PyntCloud
 
 
-def point_cloud_filter(cloud: numpy.ndarray):
+def remove_point_cloud_noise(cloud: numpy.ndarray):
     cloud_array = DataFrame(cloud[:, 0:3])
     cloud_array.columns = ['x', 'y', 'z']  # 给选取到的数据 附上标题
     cloud_pynt = PyntCloud(points=cloud_array)  # 将points的数据 存到结构体中

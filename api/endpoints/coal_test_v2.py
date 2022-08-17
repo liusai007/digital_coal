@@ -13,7 +13,7 @@ from core.Response import *
 from fastapi import APIRouter
 from api.endpoints.coal import inventory_coal as inventory_coal_test
 from methods.radar_func import *
-from methods.cloud_filter import point_cloud_filter
+from methods.cloud_noise import remove_point_cloud_noise
 from methods.put_cloud import put_cloud_to_minio
 from methods.polygon_filter import is_poi_within_polygon
 from methods.bounding_box_filter import bounding_box_filter
@@ -58,7 +58,7 @@ async def inventory_coal(auto_yard: CoalYard):
 
     combined_cloud_ndarray: numpy.ndarray = numpy.concatenate(cloud_ndarray_list, axis=0)
     # 点云去噪操作
-    new_cloud: numpy.ndarray = point_cloud_filter(cloud=combined_cloud_ndarray)
+    new_cloud: numpy.ndarray = remove_point_cloud_noise(cloud=combined_cloud_ndarray)
     # 去除棚顶操作
     new_cloud: numpy.ndarray = remove_cover_and_bottom(new_cloud, cover=12.0, bottom=-1.0)
     # 多边形切割操作
