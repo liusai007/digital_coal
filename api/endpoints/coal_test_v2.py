@@ -13,6 +13,7 @@ from core.Response import *
 from fastapi import APIRouter
 from api.endpoints.coal import inventory_coal as inventory_coal_test
 from methods.radar_func import *
+from methods.cloud_filter import point_cloud_filter
 from methods.put_cloud import put_cloud_to_minio
 from methods.polygon_filter import is_poi_within_polygon
 from methods.bounding_box_filter import bounding_box_filter
@@ -56,12 +57,15 @@ async def inventory_coal(auto_yard: CoalYard):
         cloud_ndarray_list.append(radar_cloud_ndarray)
 
     combined_cloud_ndarray: numpy.ndarray = numpy.concatenate(cloud_ndarray_list, axis=0)
-
-    # 去除棚顶和多边形切割操作
-    new_cloud: numpy.ndarray = remove_cover_and_bottom(combined_cloud_ndarray, cover=12.0, bottom=-1.0)
+    # 点云去噪操作
+    new_cloud: numpy.ndarray = point_cloud_filter(cloud=combined_cloud_ndarray)
+    # 去除棚顶操作
+    new_cloud: numpy.ndarray = remove_cover_and_bottom(new_cloud, cover=12.0, bottom=-1.0)
+    # 多边形切割操作
     new_cloud: numpy.ndarray = remove_out_polygon_point(new_cloud, poly=polygon)
+    # 保存点云文件操作
     np.savetxt(fname='combined_cloud.txt', X=new_cloud, fmt='%.5f', delimiter=' ')
-
+    # 进行煤堆切割并计算体积
     res_list: List[InventoryCoalResult] = await split_and_calculate_volume(cloud_ndarray=new_cloud)
 
     return success(data=res_list)
