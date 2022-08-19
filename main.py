@@ -3,6 +3,7 @@
 @Author : lpy
 @DES:
 """
+import json
 import io
 import ctypes
 import asyncio
@@ -133,6 +134,7 @@ async def websocket_endpoint(websocket: WebSocket):
     ws_id = id(websocket)
     websocket.list_buffer = list()
     client_id = websocket.query_params['clientId']
+    base_url = settings.PATH_CONFIG.BASEURL
     # 设置回调函数，将 websocket 内存地址作为参数，传入回调中
     set_callback_function(func=radar_callback, obj_id=ws_id)
     try:
@@ -142,7 +144,6 @@ async def websocket_endpoint(websocket: WebSocket):
             yard_id = 10
             if data == 'start':
                 await websocket.send_text("正在通过指令进行传输，请稍后...")
-                base_url = settings.PATH_CONFIG.BASEURL
                 url = base_url + '/coal/coalYard/realTime/coalYardInfo?coalYardId=' + str(yard_id)
                 response = requests.get(url).json()
                 # DictOBj将一个dict转化为一个对象，方便以属性的方式访问
@@ -151,7 +152,6 @@ async def websocket_endpoint(websocket: WebSocket):
                 # 这一步很重要: 给websocket添加煤场属性，值为煤场对象
                 websocket.coalYard = coal_yard_obj
                 # websocket.__setattr__('coalYard', coal_yard_obj)
-
                 # 判断是否正在盘煤（如果请求参数中的雷达没有全部停止，则发送等待信号）
                 radars = coal_yard_obj.coalRadarList
                 if is_every_radar_stop(radars) is False:
@@ -184,11 +184,40 @@ async def websocket_endpoint(websocket: WebSocket):
                 # 实现用于切割煤场并计算体积的功能
                 res_list = await split_and_calculate_volume(coal_yard=coal_yard_obj, cloud_ndarray=cloud_ndarray)
             for i in res_list:
-                await websocket.send_text("煤堆：" + i.coalHeapName + "\n" + "体积：" + str(i.volume) + "\n" + "高度：" + str(i.maxHeight))
+                await websocket.send_text(
+                    "煤堆：" + i.coalHeapName + "\n" + "体积：" + str(i.volume) + "\n" + "高度：" + str(i.maxHeight))
+
+            # 实时推送完成后 数据推送到后台接口 POST形式
+
+            coalYardObj = dict()
+            coalYardObj["coalYardId"] = coal_yard_obj.coalYardId
+            coalYardObj["coalYardName"] = coal_yard_obj.coalYardName
+            coalYardObj["inventoryTime"] = datetime.now().strftime('%Y-%m-%d %H:%I:%S')
+            coalYardObj["coalHeapResultList"] = res_list
+
+            coalYardObj = json.dumps(coalYardObj, default=convert2json)
+            coalYardObj = json.loads(coalYardObj)
+
+            url = base_url + '/coal/coalYard/realTime/inventoryCoalCallback'
+            re = requests.post(url, json=coalYardObj).json()
+            print("回调结果：" + str(re))
+            await websocket.send_text("盘煤回调接口调用成功！")
+
 
     except WebSocketDisconnect:
         manager.disconnect(websocket)
         await manager.broadcast(f"Client #{client_id} left the chat")
+
+
+def convert2json(person):
+    return {
+        'coalHeapId': person.coalHeapId,
+        'coalHeapName': person.coalHeapName,
+        'volume': person.volume,
+        'maxHeight': person.maxHeight,
+        'density': person.density,
+        'mesId': person.mesId
+    }
 
 
 def radar_callback(cid: c_uint, datalen: c_int, data, ws_id):
@@ -272,7 +301,6 @@ async def split_and_calculate_volume(coal_yard, cloud_ndarray: numpy.ndarray):
         # 根据煤堆区域切割获取小点云文件(ndarray类型)，并保存ndarray类型为txt文件
         split_cloud_ndarray: numpy.ndarray = bounding_box_filter(cloud_ndarray, heap.coalHeapArea)
         # numpy.savetxt(fname=minio_path, X=split_cloud_ndarray, fmt='%.2f', delimiter=' ')
-
 
         # 根据小点云文件(ndarray类型)计算体积和高度
         vom_start = datetime.now()
