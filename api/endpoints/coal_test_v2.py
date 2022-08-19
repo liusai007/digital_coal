@@ -13,6 +13,7 @@ from core.Response import *
 from fastapi import APIRouter
 from api.endpoints.coal import inventory_coal as inventory_coal_test
 from methods.radar_func import *
+from methods.cloud_cover import remove_cover_by_list
 from methods.cloud_noise import remove_point_cloud_noise
 from methods.put_cloud import put_cloud_to_minio
 from methods.polygon_filter import is_poi_within_polygon
@@ -23,6 +24,11 @@ from models.custom_class import CoalYard, CoalRadar, InventoryCoalResult
 router = APIRouter()
 coal_yard: CoalYard
 polygon = [[8.0, 8.0], [420.0, 8.0], [420.0, 170.0], [8.0, 220.0], [8.0, 8.0]]
+split_list = [[10.5, 12.5, 8], [12.5, 14.0, 10], [14.0, 15.0, 11], [15.0, 16.0, 11], [16.0, 17.0, 13],
+              [17.0, 18.0, 14], [18.0, 19.0, 16], [19.0, 20.0, 18], [20.0, 21.0, 20], [21.0, 180.0, 26],
+              [180.0, 192.0, 10.0], [192.0, 195.0, 8.0], [195.0, 198.0, 6.0], [198.0, 200.0, 5.0],
+              [200.0, 202.0, 4.0], [202.0, 204.0, 2.0], [204.0, 208.0, 2.0], [208.0, 212.0, 1.0],
+              [212.0, 216.0, 1.0], [216.0, 2220.0, 1.0], [220.0, 240.0, 1.0]]
 
 
 @router.post("/coal_test_v2", summary="标准测试版")
@@ -57,12 +63,20 @@ async def inventory_coal(auto_yard: CoalYard):
         cloud_ndarray_list.append(radar_cloud_ndarray)
 
     combined_cloud_ndarray: numpy.ndarray = numpy.concatenate(cloud_ndarray_list, axis=0)
+
     # 点云去噪操作
     new_cloud: numpy.ndarray = remove_point_cloud_noise(cloud=combined_cloud_ndarray)
-    # 去除棚顶操作
-    new_cloud: numpy.ndarray = remove_cover_and_bottom(new_cloud, cover=12.0, bottom=-1.0)
+
+    # 去除底面操作
+    new_cloud: numpy.ndarray = new_cloud[new_cloud[:, 2] >= 2.0]
+
+    # 去除棚顶和保留多边形边界操作
+    # new_cloud: numpy.ndarray = remove_cover_and_bottom(new_cloud, cover=12.0, bottom=-1.0)
+    new_cloud: numpy.ndarray = remove_cover_by_list(cloud=new_cloud, s_list=split_list, polygon=polygon)
+
     # 多边形切割操作
-    new_cloud: numpy.ndarray = remove_out_polygon_point(new_cloud, poly=polygon)
+    # new_cloud: numpy.ndarray = remove_out_polygon_point(new_cloud, poly=polygon)
+
     # 保存点云文件操作
     np.savetxt(fname='combined_cloud.txt', X=new_cloud, fmt='%.5f', delimiter=' ')
     # 进行煤堆切割并计算体积
