@@ -5,7 +5,7 @@
 """
 import numpy
 from typing import List
-from models.cloud_stents import Stent
+from models.custom_stent import Stent
 
 
 def remove_stents(cloud, stent_list: List[Stent]):

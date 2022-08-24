@@ -20,7 +20,7 @@ from methods.put_cloud import put_cloud_to_minio
 from methods.polygon_filter import is_poi_within_polygon
 from methods.bounding_box_filter import bounding_box_filter
 from methods.calculate_volume import heap_vom_and_maxheight
-from models.cloud_stents import stents
+from models.custom_stent import stents
 from models.custom_class import CoalYard, CoalRadar, InventoryCoalResult
 
 router = APIRouter()
