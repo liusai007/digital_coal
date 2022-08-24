@@ -127,13 +127,13 @@ class ConnectionManager:
 manager = ConnectionManager()
 
 
-@application.websocket("/ws")
+@application.websocket("/inventory/realTime")
 async def websocket_endpoint(websocket: WebSocket):
     await manager.connect(websocket)
     await websocket.send_text('Websocket已连接成功，正在等待用户指令！')
     ws_id = id(websocket)
     websocket.list_buffer = list()
-    client_id = websocket.query_params['clientId']
+    # client_id = websocket.query_params['clientId']
     base_url = settings.PATH_CONFIG.BASEURL
     # 设置回调函数，将 websocket 内存地址作为参数，传入回调中
     set_callback_function(func=radar_callback, obj_id=ws_id)
@@ -206,7 +206,7 @@ async def websocket_endpoint(websocket: WebSocket):
 
     except WebSocketDisconnect:
         manager.disconnect(websocket)
-        await manager.broadcast(f"Client #{client_id} left the chat")
+        # await manager.broadcast(f"Client #{client_id} left the chat")
 
 
 def convert2json(person):
