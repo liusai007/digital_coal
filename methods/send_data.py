@@ -18,7 +18,7 @@ async def send_frame_data(websocket, n: int):
         elif len(websocket.list_buffer) >= n * i:
             ws_list = websocket.list_buffer
             first_list = ws_list[0: n * i]
-            print('first_list == ', first_list)
+            # print('first_list == ', first_list)
             result = await websocket.send_text(str(first_list))
             # print('result ==', result)
             i += 1
@@ -44,7 +44,7 @@ async def send_frame_data(websocket, n: int):
                             ws_list = websocket.list_buffer
                             last_list = ws_list[n * (i - 1):]
                             if last_list.__len__() != 0:
-                                print('last_list == ', last_list[0])
+                                # print('last_list == ', last_list[0])
                                 await websocket.send_text(str(last_list))
                                 await websocket.send_text("数据发送完成！")
                             break

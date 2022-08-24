@@ -19,8 +19,7 @@ html = """
         <script>
             var client_id = Math.floor((Math.random()*1000)+1);
             document.querySelector("#ws-id").textContent = client_id;
-            var ws = new WebSocket(`ws://localhost:8000/ws?coalYardId=10&clientId=${client_id}`);
-
+            var ws = new WebSocket(`ws://10.31.3.136:8001/inventory/realTime?coalYardId=10`);
             ws.onmessage = function(event) {
                 var messages = document.getElementById('messages')
                 var message = document.createElement('li')
