@@ -13,12 +13,14 @@ from core.Response import *
 from fastapi import APIRouter
 from api.endpoints.coal import inventory_coal as inventory_coal_test
 from methods.radar_func import *
+from methods.cloud_stent import remove_stents
 from methods.cloud_cover import remove_cover_by_list
 from methods.cloud_noise import remove_point_cloud_noise
 from methods.put_cloud import put_cloud_to_minio
 from methods.polygon_filter import is_poi_within_polygon
 from methods.bounding_box_filter import bounding_box_filter
 from methods.calculate_volume import heap_vom_and_maxheight
+from models.cloud_stents import stents
 from models.custom_class import CoalYard, CoalRadar, InventoryCoalResult
 
 router = APIRouter()
@@ -67,6 +69,9 @@ async def inventory_coal(auto_yard: CoalYard):
     # 点云去噪操作
     new_cloud: numpy.ndarray = remove_point_cloud_noise(cloud=combined_cloud_ndarray)
 
+    # 保存点云文件操作
+    np.savetxt(fname='combined_cloud.txt', X=new_cloud, fmt='%.5f', delimiter=' ')
+
     # 去除底面操作
     new_cloud: numpy.ndarray = new_cloud[new_cloud[:, 2] >= 2.0]
 
@@ -74,11 +79,11 @@ async def inventory_coal(auto_yard: CoalYard):
     # new_cloud: numpy.ndarray = remove_cover_and_bottom(new_cloud, cover=12.0, bottom=-1.0)
     new_cloud: numpy.ndarray = remove_cover_by_list(cloud=new_cloud, s_list=split_list, polygon=polygon)
 
+    # 去除柱子操作
+    new_cloud: numpy.ndarray = remove_stents(cloud=new_cloud, stent_list= stents)
     # 多边形切割操作
     # new_cloud: numpy.ndarray = remove_out_polygon_point(new_cloud, poly=polygon)
 
-    # 保存点云文件操作
-    np.savetxt(fname='combined_cloud.txt', X=new_cloud, fmt='%.5f', delimiter=' ')
     # 进行煤堆切割并计算体积
     res_list: List[InventoryCoalResult] = await split_and_calculate_volume(cloud_ndarray=new_cloud)
 
