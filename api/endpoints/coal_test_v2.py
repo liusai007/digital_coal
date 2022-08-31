@@ -36,6 +36,68 @@ split_list = [[10.5, 12.5, 8], [12.5, 14.0, 10], [14.0, 15.0, 11], [15.0, 16.0, 
 
 
 @router.post("/coal_test_v2", summary="标准测试版")
+async def inventory_coal(coal_yard: CoalYard):
+
+    coal_yard_list.append(coal_yard)
+
+    # for radar in coal_yard.coalRadarList:
+    #     radar.bytes_buffer = bytes()
+
+    # 判断煤场id, id=8 or 10,走模拟数据
+    # if coal_yard.coalYardId == 8 or coal_yard.coalYardId == 10:
+    #     return await inventory_coal_test(coal_yard)
+    # 根据煤场id无法在回调中获取coal_yard对象，设置全局coal_yard
+    # yard_id = id(coal_yard)
+
+    cloud_ndarray_list: List[numpy.ndarray] = list()
+    set_callback_function(func=_callback, obj_id=111)
+
+    radars = coal_yard.coalRadarList
+    radars_start_connect(radars=radars)
+
+    await asyncio.sleep(2)
+    begin_response = radars_rotate_begin(radars=radars, auto_yard=coal_yard)
+    if begin_response is False:
+        return fail(msg="存在未连接成功的雷达，启动失败！")
+
+    # 代表全部雷达停止的判断条件， 如果存在未中断连接的雷达则进入循环，否则跳出
+    while len(coal_yard.conn_radarsBucket) != 0:
+        continue
+
+    radars = coal_yard.coalRadarList
+    for radar in radars:
+        radar_bytes_data = radar.bytes_buffer
+        radar_cloud_ndarray: numpy.ndarray = bytes_cloud_data_rotate_and_shift(bytes_data=radar_bytes_data,
+                                                                               radar=radar)
+        cloud_ndarray_list.append(radar_cloud_ndarray)
+
+    combined_cloud_ndarray: numpy.ndarray = numpy.concatenate(cloud_ndarray_list, axis=0)
+
+    # 点云去噪操作
+    new_cloud: numpy.ndarray = remove_point_cloud_noise(cloud=combined_cloud_ndarray)
+
+    # 保存点云文件操作
+    # np.savetxt(fname='combined_cloud.txt', X=new_cloud, fmt='%.5f', delimiter=' ')
+
+    # 去除底面操作
+    new_cloud: numpy.ndarray = new_cloud[new_cloud[:, 2] >= 2.0]
+
+    # 去除棚顶和保留多边形边界操作
+    # new_cloud: numpy.ndarray = remove_cover_and_bottom(new_cloud, cover=12.0, bottom=-1.0)
+    new_cloud: numpy.ndarray = remove_cover_by_list(cloud=new_cloud, s_list=split_list, polygon=polygon)
+
+    # 去除柱子操作
+    new_cloud: numpy.ndarray = remove_stents(cloud=new_cloud, stent_list=stents)
+    # 多边形切割操作
+    # new_cloud: numpy.ndarray = remove_out_polygon_point(new_cloud, poly=polygon)
+
+    # 进行煤堆切割并计算体积
+    res_list: List[InventoryCoalResult] = await split_and_calculate_volume(cloud_ndarray=new_cloud)
+
+    return success(data=res_list)
+
+
+@router.post("/coal_test_v3", summary="标准测试版")
 async def inventory_coal(yard_id: int):
     base_url = settings.PATH_CONFIG.BASEURL
     url = base_url + '/coal/coalYard/realTime/coalYardInfo?coalYardId=' + str(yard_id)
