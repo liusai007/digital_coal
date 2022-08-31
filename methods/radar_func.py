@@ -18,7 +18,6 @@ Speed = settings.RADAR.SPEED
 AngleSceneScan = settings.RADAR.ANGLESCENESCAN
 
 ALL_DATA = list()
-BYTES_IO = BytesIO()
 WEBSOCKET_CLIENTS = list()
 gCallbackFuncList = list()  # 定义全局列表接收回调，防止系统回收
 callback_time = datetime.now()

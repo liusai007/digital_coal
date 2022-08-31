@@ -1,5 +1,6 @@
 import numpy
 import numpy as np
+from pandas import DataFrame
 from datetime import datetime
 from scipy.spatial import Delaunay
 from pyntcloud import PyntCloud
@@ -53,3 +54,32 @@ async def heap_vom_and_maxheight(cloud_ndarray: numpy.ndarray, minio_path: str =
     response = {'maxHeight': maxHeight, 'volume': volume}
     return response
 
+
+async def new_heap_vom_and_maxheight(cloud_ndarray: numpy.ndarray, minio_path: str = None):
+
+    if cloud_ndarray.shape[0] < 500:
+        return {'maxHeight': 0, 'volume': 0}
+
+    pd_array = DataFrame(cloud_ndarray)
+    pd_array.columns = ['x', 'y', 'z']
+    u = cloud_ndarray[:, 0]
+    v = cloud_ndarray[:, 1]
+    z = cloud_ndarray[:, 2]
+
+    maxHeight = max(z) - min(z)
+
+    tri = Delaunay(np.array([u, v]).T)
+    # nn = np.array([u, v]).T
+    # mesh = DataFrame(tri.simplices)
+    mesh = DataFrame(tri.vertices)
+    mesh.columns = ['v1', 'v2', 'v3']
+
+    diamond = PyntCloud(points=pd_array, mesh=mesh)
+    convex_hull_id = diamond.add_structure("convex_hull")
+    convex_hull = diamond.structures[convex_hull_id]
+    diamond.mesh = convex_hull.get_mesh()
+    # diamond.to_file("bunny_hull.ply", also_save=["mesh"])
+    volume = convex_hull.volume
+
+    response = {'maxHeight': maxHeight, 'volume': volume}
+    return response

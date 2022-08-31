@@ -111,7 +111,6 @@ class ConnectionManager:
     async def connect(self, websocket: WebSocket):
         await websocket.accept()
         self.active_connections.append(websocket)
-        # print('客户端数量 ==', self.active_connections.__len__())
 
     def disconnect(self, websocket: WebSocket):
         self.active_connections.remove(websocket)
@@ -133,14 +132,12 @@ async def websocket_endpoint(websocket: WebSocket):
     await websocket.send_text('Websocket已连接成功，正在等待用户指令！')
     ws_id = id(websocket)
     websocket.list_buffer = list()
-    # client_id = websocket.query_params['clientId']
     base_url = settings.PATH_CONFIG.BASEURL
     # 设置回调函数，将 websocket 内存地址作为参数，传入回调中
     set_callback_function(func=radar_callback, obj_id=ws_id)
     try:
         while True:
             data = await websocket.receive_text()
-            # yard_id = websocket.query_params['coalYardId']
             yard_id = 10
             if data == 'start':
                 await websocket.send_text("正在通过指令进行传输，请稍后...")

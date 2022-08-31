@@ -9,6 +9,7 @@ import time
 import numpy
 import ctypes
 import asyncio
+import requests
 from core.Response import *
 from fastapi import APIRouter
 from api.endpoints.coal import inventory_coal as inventory_coal_test
@@ -19,12 +20,13 @@ from methods.cloud_noise import remove_point_cloud_noise
 from methods.put_cloud import put_cloud_to_minio
 from methods.polygon_filter import is_poi_within_polygon
 from methods.bounding_box_filter import bounding_box_filter
-from methods.calculate_volume import heap_vom_and_maxheight
+from methods.calculate_volume import new_heap_vom_and_maxheight
 from models.custom_stent import stents
+from models.dict_obj import DictObj
 from models.custom_class import CoalYard, CoalRadar, InventoryCoalResult
 
 router = APIRouter()
-coal_yard: CoalYard
+coal_yard_list: List[CoalYard] = []
 polygon = [[8.0, 8.0], [420.0, 8.0], [420.0, 170.0], [8.0, 220.0], [8.0, 8.0]]
 split_list = [[10.5, 12.5, 8], [12.5, 14.0, 10], [14.0, 15.0, 11], [15.0, 16.0, 11], [16.0, 17.0, 13],
               [17.0, 18.0, 14], [18.0, 19.0, 16], [19.0, 20.0, 18], [20.0, 21.0, 20], [21.0, 180.0, 26],
@@ -34,21 +36,33 @@ split_list = [[10.5, 12.5, 8], [12.5, 14.0, 10], [14.0, 15.0, 11], [15.0, 16.0, 
 
 
 @router.post("/coal_test_v2", summary="标准测试版")
-async def inventory_coal(auto_yard: CoalYard):
-    global coal_yard
-    coal_yard = auto_yard
+async def inventory_coal(yard_id: int):
+    base_url = settings.PATH_CONFIG.BASEURL
+    url = base_url + '/coal/coalYard/realTime/coalYardInfo?coalYardId=' + str(yard_id)
+    response = requests.get(url).json()
+    # DictOBj将一个dict转化为一个对象，方便以属性的方式访问
+    coal_yard_dict = response['data']
+    coal_yard: CoalYard = DictObj(coal_yard_dict)
+    coal_yard_list.append(coal_yard)
+
+    # 给煤场对象添加属性
+    coal_yard.conn_radarsBucket = []
+    for radar in coal_yard.coalRadarList:
+        radar.bytes_buffer = bytes()
+
     # 判断煤场id, id=8 or 10,走模拟数据
-    if coal_yard.coalYardId == 8 or coal_yard.coalYardId == 10:
-        return await inventory_coal_test(coal_yard)
+    # if coal_yard.coalYardId == 8 or coal_yard.coalYardId == 10:
+    #     return await inventory_coal_test(coal_yard)
     # 根据煤场id无法在回调中获取coal_yard对象，设置全局coal_yard
-    yard_id = id(coal_yard)
+    # yard_id = id(coal_yard)
+
     cloud_ndarray_list: List[numpy.ndarray] = list()
-    set_callback_function(func=_callback, obj_id=yard_id)
+    set_callback_function(func=_callback, obj_id=111)
 
     radars = coal_yard.coalRadarList
     radars_start_connect(radars=radars)
 
-    await asyncio.sleep(1)
+    await asyncio.sleep(2)
     begin_response = radars_rotate_begin(radars=radars, auto_yard=coal_yard)
     if begin_response is False:
         return fail(msg="存在未连接成功的雷达，启动失败！")
@@ -70,7 +84,7 @@ async def inventory_coal(auto_yard: CoalYard):
     new_cloud: numpy.ndarray = remove_point_cloud_noise(cloud=combined_cloud_ndarray)
 
     # 保存点云文件操作
-    np.savetxt(fname='combined_cloud.txt', X=new_cloud, fmt='%.5f', delimiter=' ')
+    # np.savetxt(fname='combined_cloud.txt', X=new_cloud, fmt='%.5f', delimiter=' ')
 
     # 去除底面操作
     new_cloud: numpy.ndarray = new_cloud[new_cloud[:, 2] >= 2.0]
@@ -80,7 +94,7 @@ async def inventory_coal(auto_yard: CoalYard):
     new_cloud: numpy.ndarray = remove_cover_by_list(cloud=new_cloud, s_list=split_list, polygon=polygon)
 
     # 去除柱子操作
-    new_cloud: numpy.ndarray = remove_stents(cloud=new_cloud, stent_list= stents)
+    new_cloud: numpy.ndarray = remove_stents(cloud=new_cloud, stent_list=stents)
     # 多边形切割操作
     # new_cloud: numpy.ndarray = remove_out_polygon_point(new_cloud, poly=polygon)
 
@@ -91,11 +105,8 @@ async def inventory_coal(auto_yard: CoalYard):
 
 
 def _callback(cid: c_uint, data_len: c_int, data, yard_id):
-    # 根据煤场id无法获取对象，设置全局 coal_yard
-    # auto_yard = get_coal_yard_by_id(yard_id=yard_id)
-    # print(f'yard_name ===== {auto_yard.coalYardName}')
-    # bucket = auto_yard.conn_radarsBucket
-    bucket = coal_yard.conn_radarsBucket
+    # 根据雷达 id 获取对应的 coal_yard 对象
+    coal_yard = get_yard_by_cid(cid=cid)
     code = int.from_bytes(data[2:4], byteorder='little', signed=True)
 
     if code == 3534:
@@ -129,6 +140,14 @@ def _callback(cid: c_uint, data_len: c_int, data, yard_id):
                 bucket.remove(cid)
                 print('删除雷达， cid ====================== ', cid)
     return
+
+
+def get_yard_by_cid(cid):
+    for coal_yard in coal_yard_list:
+        radars = coal_yard.coalRadarList
+        for radar in radars:
+            if cid == radar.id:
+                return coal_yard
 
 
 def radars_rotate_begin(radars: List[CoalRadar], auto_yard: CoalYard):
@@ -170,6 +189,7 @@ async def split_and_calculate_volume(cloud_ndarray: numpy.ndarray):
     res_list: List[InventoryCoalResult] = list()  # 设置一个空字典，接收煤堆对象
     time_stamp = str(time.strftime("%m%d%H%M%S"))  # 设置时间戳，标记文件生成时间
 
+    coal_yard = coal_yard_list[0]
     # 判断yard_name 文件夹是否存在，不存在创建
     coal_yard_directory = settings.DATA_PATH + '/' + coal_yard.coalYardName
     if not os.path.exists(coal_yard_directory):
@@ -196,7 +216,7 @@ async def split_and_calculate_volume(cloud_ndarray: numpy.ndarray):
 
         # 根据小点云文件(ndarray类型)计算体积和高度
         vom_start = datetime.now()
-        vom_and_maxheight = await heap_vom_and_maxheight(cloud_ndarray=split_cloud_ndarray, minio_path=minio_path)
+        vom_and_maxheight = await new_heap_vom_and_maxheight(cloud_ndarray=split_cloud_ndarray, minio_path=minio_path)
         vom_end = datetime.now()
         print(f"{heap.coalHeapName} 计算体积运行时间 === {vom_end - vom_start}")
         res.volume = vom_and_maxheight['volume']
