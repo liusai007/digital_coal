@@ -3,6 +3,8 @@
 @Author : lpy
 @DES:
 """
+import _ctypes
+import random
 import json
 import io
 import ctypes
@@ -129,23 +131,29 @@ manager = ConnectionManager()
 @application.websocket("/inventory/realTime")
 async def websocket_endpoint(websocket: WebSocket):
     await manager.connect(websocket)
-    await websocket.send_text('Websocket已连接成功，正在等待用户指令！')
+    clientId = random.randint(1, 10000)
+    websocket.clientId = clientId
+    await websocket.send_text("当前websocket的clientId为：" + str(websocket.clientId))
     ws_id = id(websocket)
+    await websocket.send_text('Websocket已连接成功，正在等待用户指令！')
     websocket.list_buffer = list()
     base_url = settings.PATH_CONFIG.BASEURL
     # 设置回调函数，将 websocket 内存地址作为参数，传入回调中
-    set_callback_function(func=radar_callback, obj_id=ws_id)
+    set_callback_function(func=radar_callback, obj_id=websocket.clientId)
     try:
         while True:
             data = await websocket.receive_text()
-            yard_id = 10
+            yard_id = websocket.query_params['coalYardId']
+            # yard_id = 11
             if data == 'start':
+                await websocket.send_text("接受的CoalYardId为：" + str(yard_id))
                 await websocket.send_text("正在通过指令进行传输，请稍后...")
                 url = base_url + '/coal/coalYard/realTime/coalYardInfo?coalYardId=' + str(yard_id)
                 response = requests.get(url).json()
                 # DictOBj将一个dict转化为一个对象，方便以属性的方式访问
                 coal_yard_dict = response['data']
                 coal_yard_obj = DictObj(coal_yard_dict)
+                logger.info(response)
                 # 这一步很重要: 给websocket添加煤场属性，值为煤场对象
                 websocket.coalYard = coal_yard_obj
                 # websocket.__setattr__('coalYard', coal_yard_obj)
@@ -159,21 +167,29 @@ async def websocket_endpoint(websocket: WebSocket):
                     # websocket.__setattr__('conn_radarsBucket', list())
                     # 如果雷达全部处于停止状态，则开始进行连接雷达操作
                     radars_start_connect(radars=radars)
-                    await asyncio.sleep(2)
                     await websocket.send_text('开始盘煤')
                     # 设置空list用于在回调函数中保存雷达帧数据
                     # websocket.list_buffer = list()
                     # websocket.__setattr__('list_buffer', list())
+                    logger.info("开始睡眠")
+                    await asyncio.sleep(2)
+                    logger.info("connectBuckets内数据为：")
+                    logger.info(websocket.conn_radarsBucket)
                     begin_response = radars_rotate_begin(radars, websocket)
+                    logger.info("开始状态")
+                    logger.info(begin_response)
                     if begin_response is False:
                         await websocket.send_text('存在未连接成功的雷达，操作中止......')
+                        logger.info("存在未连接成功的雷达，操作中止")
                         continue
                 # await start(ws_id=ws_id)
             else:
                 await websocket.send_text(data='输入的指令暂时无法识别，请联系管理员')
+                logger.info("输入的指令暂时无法识别，请联系管理员")
                 continue
 
             # 发送长度为3000的数据帧，n代表一次发送的数据长度
+            await websocket.send_text("开始传输数据")
             result = await send_frame_data(websocket, n=3000)
             if result == "success":
                 cloud_list = websocket.list_buffer
@@ -218,7 +234,13 @@ def convert2json(person):
 
 
 def radar_callback(cid: c_uint, datalen: c_int, data, ws_id):
-    websocket = get_websocket_by_wsid(ws_id=ws_id)
+    for i in manager.active_connections:
+        if ws_id == i.clientId:
+            logger.info("进入了正确的websocket判断区间")
+            websocket = i
+        else:
+            websocket = manager.active_connections[0]
+
     bucket = websocket.conn_radarsBucket
     list_buffer = websocket.list_buffer
     # print(f'bucket ===== {bucket}')
@@ -249,7 +271,6 @@ def radar_callback(cid: c_uint, datalen: c_int, data, ws_id):
         # cloud_rotated_result = pool.submit(bytes_cloud_frame_rotated, bytes_frame).result()
         new_cloud_list = bytes_cloud_frame_rotated(kwargs)
         list_buffer.extend(new_cloud_list)
-
         last_line_flag = data[44]
         if last_line_flag == b'\x80':
             # radar_stop 函数停止并关闭雷达连接，同时在RADAR_BUCKET中删除雷达id
@@ -259,6 +280,62 @@ def radar_callback(cid: c_uint, datalen: c_int, data, ws_id):
                 bucket.remove(cid)
 
     return
+
+
+def bytes_cloud_frame_rotated(kwargs: dict):
+    ws_id = kwargs['ws_id']
+    # websocket = get_websocket_by_wsid(ws_id=ws_id)
+    for i in manager.active_connections:
+        if ws_id == i.clientId:
+            logger.info("进入了正确的websocket判断区间")
+            websocket = i
+        else:
+            websocket = manager.active_connections[0]
+
+    logger.info(websocket)
+    coal_yard = websocket.coalYard
+    # list_buffer = websocket.listBuffer
+
+    # bytes_frame = join_cid_to_bytes(point_bytes=points_data, cid=cid)
+    # # # 判断yard_name 文件夹是否存在，不存在创建
+    # FRAME_DATA_PATH = settings.DATA_PATH + '/' + coal_yard.coalYardName + '/frame_data'
+    # if not os.path.exists(FRAME_DATA_PATH):
+    #     os.makedirs(FRAME_DATA_PATH)
+
+    points_data = kwargs['data']
+    cloud_ndarray: numpy.ndarray = np.frombuffer(points_data, dtype=np.int16).reshape(-1, 3)
+
+    cid = kwargs['cid']
+    radars = coal_yard.coalRadarList
+    for radar in radars:
+        if radar.id == cid:
+            # if cloud_pdarray['cid'][0] == cid:
+            #     radar_cloud_pdarray = cloud_pdarray[cloud_pdarray['cid'] == cid][['x', 'y', 'z']]
+            #     radar_cloud_ndarray = radar_cloud_pdarray.values
+
+            div = np.array([100, 100, 100])
+            # div = np.array([1, 1, 1])
+            radar_cloud_ndarray = np.divide(cloud_ndarray, div)
+            # radar_cloud_ndarray = radar_cloud_ndarray.astype(np.float16)
+
+            rotated_radar_cloud_ndarray: numpy.ndarray = euler_rotate(radar_cloud_ndarray, radar)
+            # new_cloud: numpy.ndarray = rotated_radar_cloud_ndarray.reshape(-1, 3)
+            # new_cloud: numpy.ndarray = new_cloud[:, 1:4]
+            new_cloud_list = rotated_radar_cloud_ndarray.tolist()
+            # list_buffer.append(new_cloud_list)
+            # list_buffer.extend(new_cloud_list)
+            return new_cloud_list
+            # await websocket.send_text(str(new_cloud_list))
+
+            # save_path = FRAME_DATA_PATH + '/radar_' + str(cid) + '_cloudData_' + str(time_now) + ".txt"
+            # np.savetxt(fname=save_path, X=rotated_radar_cloud_ndarray, fmt='%.2f', delimiter=' ')
+            # f = open(save_path, 'r')
+            # con = f.readlines()
+            # f.close()
+            # 以上代表已经经过欧拉旋转并且平移的 帧数据
+            # return rotated_radar_cloud_ndarray
+            # len_array = rotated_radar_cloud_ndarray.__len__()
+            # ALL_DATA.append(con)
 
 
 async def start(ws_id):
@@ -327,6 +404,6 @@ if __name__ == '__main__':
 
     uvicorn.run(app="main:application",
                 host='0.0.0.0',
-                port=8000,
+                port=8001,
                 workers=1,
                 reload=True)
