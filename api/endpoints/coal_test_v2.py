@@ -20,7 +20,7 @@ from methods.cloud_noise import remove_point_cloud_noise
 from methods.put_cloud import put_cloud_to_minio
 from methods.polygon_filter import is_poi_within_polygon
 from methods.bounding_box_filter import bounding_box_filter
-from methods.calculate_volume import new_heap_vom_and_maxheight
+from methods.calculate_volume import *
 from models.custom_stent import stents
 from models.dict_obj import DictObj
 from models.custom_class import CoalYard, CoalRadar, InventoryCoalResult
@@ -97,7 +97,7 @@ async def inventory_coal(coal_yard: CoalYard):
     return success(data=res_list)
 
 
-@router.post("/coal_test_v3", summary="标准测试版")
+@router.post("/coal_test_v3", summary="调用接口测试")
 async def inventory_coal(yard_id: int):
     base_url = settings.PATH_CONFIG.BASEURL
     url = base_url + '/coal/coalYard/realTime/coalYardInfo?coalYardId=' + str(yard_id)
@@ -278,7 +278,7 @@ async def split_and_calculate_volume(cloud_ndarray: numpy.ndarray):
 
         # 根据小点云文件(ndarray类型)计算体积和高度
         vom_start = datetime.now()
-        vom_and_maxheight = await new_heap_vom_and_maxheight(cloud_ndarray=split_cloud_ndarray, minio_path=minio_path)
+        vom_and_maxheight = await ply_heap_vom_and_height(cloud_ndarray=split_cloud_ndarray, minio_path=minio_path)
         vom_end = datetime.now()
         print(f"{heap.coalHeapName} 计算体积运行时间 === {vom_end - vom_start}")
         res.volume = vom_and_maxheight['volume']

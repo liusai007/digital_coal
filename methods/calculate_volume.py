@@ -1,3 +1,4 @@
+import vtk
 import numpy
 import numpy as np
 from pandas import DataFrame
@@ -56,7 +57,6 @@ async def heap_vom_and_maxheight(cloud_ndarray: numpy.ndarray, minio_path: str =
 
 
 async def new_heap_vom_and_maxheight(cloud_ndarray: numpy.ndarray, minio_path: str = None):
-
     if cloud_ndarray.shape[0] < 500:
         return {'maxHeight': 0, 'volume': 0}
 
@@ -82,4 +82,35 @@ async def new_heap_vom_and_maxheight(cloud_ndarray: numpy.ndarray, minio_path: s
     volume = convex_hull.volume
 
     response = {'maxHeight': maxHeight, 'volume': volume}
+    return response
+
+
+async def ply_heap_vom_and_height(cloud_ndarray: numpy.ndarray, minio_path: str = None):
+    if cloud_ndarray.shape[0] < 500:
+        return {'maxHeight': 0, 'volume': 0}
+
+    pd_array = DataFrame(cloud_ndarray, columns=['x', 'y', 'z'])
+    u = cloud_ndarray[:, 0]
+    v = cloud_ndarray[:, 1]
+    z = cloud_ndarray[:, 2]
+
+    max_height = max(z) - min(z)
+
+    tri = Delaunay(np.array([u, v]).T)
+    mesh = DataFrame(tri.simplices, columns=['v1', 'v2', 'v3'])
+
+    diamond = PyntCloud(points=pd_array, mesh=mesh)
+    diamond.to_file("dd.ply", also_save=["mesh"])
+
+    # ply体积测量
+    vtkReader = vtk.vtkPLYReader()
+    vtkReader.SetFileName("dd.ply")
+    vtkReader.Update()
+    polydata = vtkReader.GetOutput()
+    mass = vtk.vtkMassProperties()
+    mass.SetInputData(polydata)
+
+    volume = mass.GetVolume()
+
+    response = {'maxHeight': max_height, 'volume': volume}
     return response

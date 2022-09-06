@@ -33,7 +33,7 @@ router = APIRouter()
 queue = Queue()
 
 gCallbackFuncList = []  # 定义全局列表接收回调，防止系统回收
-dllPath = settings.STATIC_DIR + '/sdk/CDPSIMCLIENT.dll'
+dllPath = settings.STATIC_DIR + '/sdk/CDPSIMCLIENT-win64.dll'
 soPath = settings.STATIC_DIR + '/sdk/cdpsimclient-linux64.so'
 
 if platform.system() == 'Windows':

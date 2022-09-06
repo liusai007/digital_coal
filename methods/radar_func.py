@@ -25,7 +25,7 @@ RUNNING_RADARS_BUCKET = list()  # 用于存储已经启动并且未停止的雷�
 pool = ThreadPoolExecutor(5)  # 不指定数字默认为 cpu_count（CPU数量） + 4
 # 上面的代码执行之后就会立刻创建五个等待工作的线程
 
-dllPath = settings.STATIC_DIR + '/sdk/CDPSIMCLIENT.dll'
+dllPath = settings.STATIC_DIR + '/sdk/CDPSIMCLIENT-win64.dll'
 soPath = settings.STATIC_DIR + '/sdk/cdpsimclient-linux64.so'
 if platform.system() == 'Windows':
     from ctypes import windll
