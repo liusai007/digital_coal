@@ -85,7 +85,7 @@ async def new_heap_vom_and_maxheight(cloud_ndarray: numpy.ndarray, minio_path: s
     return response
 
 
-async def ply_heap_vom_and_height(cloud_ndarray: numpy.ndarray, minio_path: str = None):
+async def ply_heap_vom_and_height(cloud_ndarray: numpy.ndarray):
     if cloud_ndarray.shape[0] < 500:
         return {'maxHeight': 0, 'volume': 0}
 

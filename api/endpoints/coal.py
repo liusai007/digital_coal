@@ -13,12 +13,11 @@ from datetime import datetime
 from fastapi import APIRouter
 from core.Response import success, fail
 from concurrent.futures import ThreadPoolExecutor
-from methods.cloud_concatenate import cloud_concatenate
 from methods.put_cloud import put_cloud_to_minio
 from methods.bounding_box_filter import bounding_box_filter
 from models.custom_class import CoalYard, InventoryCoalResult
 from methods.cloud_sample import cloud_ndarray_sample
-from methods.calculate_volume import new_heap_vom_and_maxheight
+from methods.cloud_volume import new_heap_vom_and_maxheight
 
 router = APIRouter()
 

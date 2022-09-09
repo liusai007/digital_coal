@@ -27,3 +27,15 @@ def remove_out_polygon_point(cloud: numpy.ndarray, polygon):
 
     new_array = numpy.array(new_list)
     return new_array
+
+
+def remove_cover(cloud: numpy.ndarray, s_list):
+    new_list = []
+    for s in s_list:
+        # s: [x, y, z]
+        split_cloud = cloud[(cloud[:, 1] >= s[0]) & (cloud[:, 1] < s[1]) & (cloud[:, 2] <= s[2])]
+        new_list.extend(split_cloud)
+
+    new_cloud = numpy.array(new_list)
+    return new_cloud
+

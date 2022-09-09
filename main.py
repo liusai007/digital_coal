@@ -12,12 +12,17 @@ import asyncio
 import requests
 from methods.radar_func import *
 from methods.volume_func import *
-from methods.send_data import send_frame_data
+from methods.cloud_websocket import cloud_data_generator
 # from methods.radar_func import radar_callback
 from methods.put_cloud import put_cloud_to_minio
 from methods.bounding_box_filter import bounding_box_filter
-from methods.calculate_volume import heap_vom_and_maxheight
+from methods.cloud_volume import heap_vom_and_maxheight
+from methods.cloud_stent import remove_stents
+from methods.cloud_cover import remove_cover
+from methods.cloud_save import save_cloud
+from methods.cloud_noise import remove_noise
 from models.dict_obj import DictObj
+from models.custom_yard import COAL_YARDS
 from fastapi import WebSocket, WebSocketDisconnect
 from api.endpoints.ws import *
 from fastapi.responses import HTMLResponse
@@ -29,7 +34,6 @@ from starlette.middleware.sessions import SessionMiddleware
 from fastapi.openapi.docs import (get_redoc_html, get_swagger_ui_html, get_swagger_ui_oauth2_redirect_html)
 from config import settings
 from core import Events, Exceptions, Middleware, Router
-from methods.coal_yard import coal_yard_dict  # 测试使用
 
 application = FastAPI(
     debug=settings.APP_DEBUG,
@@ -126,6 +130,7 @@ class ConnectionManager:
 
 
 manager = ConnectionManager()
+counter: int = 0
 
 
 @application.websocket("/inventory/realTime")
@@ -144,7 +149,7 @@ async def websocket_endpoint(websocket: WebSocket):
         while True:
             data = await websocket.receive_text()
             yard_id = websocket.query_params['coalYardId']
-            # yard_id = 11
+
             if data == 'start':
                 await websocket.send_text("接受的CoalYardId为：" + str(yard_id))
                 await websocket.send_text("正在通过指令进行传输，请稍后...")
@@ -153,10 +158,9 @@ async def websocket_endpoint(websocket: WebSocket):
                 # DictOBj将一个dict转化为一个对象，方便以属性的方式访问
                 coal_yard_dict = response['data']
                 coal_yard_obj = DictObj(coal_yard_dict)
-                logger.info(response)
+                # logger.info(response)
                 # 这一步很重要: 给websocket添加煤场属性，值为煤场对象
                 websocket.coalYard = coal_yard_obj
-                # websocket.__setattr__('coalYard', coal_yard_obj)
                 # 判断是否正在盘煤（如果请求参数中的雷达没有全部停止，则发送等待信号）
                 radars = coal_yard_obj.coalRadarList
                 if is_every_radar_stop(radars) is False:
@@ -164,58 +168,72 @@ async def websocket_endpoint(websocket: WebSocket):
                     await websocket.send_text('雷达正在运行中，请稍后重试......')
                 elif is_every_radar_stop(radars) is True:
                     websocket.conn_radarsBucket = list()
-                    # websocket.__setattr__('conn_radarsBucket', list())
                     # 如果雷达全部处于停止状态，则开始进行连接雷达操作
                     radars_start_connect(radars=radars)
                     await websocket.send_text('开始盘煤')
-                    # 设置空list用于在回调函数中保存雷达帧数据
-                    # websocket.list_buffer = list()
-                    # websocket.__setattr__('list_buffer', list())
-                    logger.info("开始睡眠")
                     await asyncio.sleep(2)
-                    logger.info("connectBuckets内数据为：")
-                    logger.info(websocket.conn_radarsBucket)
                     begin_response = radars_rotate_begin(radars, websocket)
-                    logger.info("开始状态")
-                    logger.info(begin_response)
+                    # logger.info("开始状态")
+                    # logger.info(begin_response)
                     if begin_response is False:
                         await websocket.send_text('存在未连接成功的雷达，操作中止......')
-                        logger.info("存在未连接成功的雷达，操作中止")
+                        # logger.info("存在未连接成功的雷达，操作中止")
                         continue
-                # await start(ws_id=ws_id)
             else:
                 await websocket.send_text(data='输入的指令暂时无法识别，请联系管理员')
-                logger.info("输入的指令暂时无法识别，请联系管理员")
+                # logger.info("输入的指令暂时无法识别，请联系管理员")
                 continue
+
+            # 判断yard_name 文件夹是否存在，不存在创建
+            coal_yard_path = settings.DATA_PATH + '/' + coal_yard_obj.coalYardName
+            if not os.path.exists(coal_yard_path):
+                os.makedirs(coal_yard_path)
 
             # 发送长度为3000的数据帧，n代表一次发送的数据长度
             await websocket.send_text("开始传输数据")
-            result = await send_frame_data(websocket, n=3000)
-            if result == "success":
-                cloud_list = websocket.list_buffer
-                cloud_ndarray = numpy.array(cloud_list)
-                # 实现用于切割煤场并计算体积的功能
-                res_list = await split_and_calculate_volume(coal_yard=coal_yard_obj, cloud_ndarray=cloud_ndarray)
-            for i in res_list:
-                await websocket.send_text(
-                    "煤堆：" + i.coalHeapName + "\n" + "体积：" + str(i.volume) + "\n" + "高度：" + str(i.maxHeight))
+            data_iterator = cloud_data_generator(websocket, n=5000)
+            for data in data_iterator:
+                if isinstance(data, list):
+                    yard = COAL_YARDS[coal_yard_obj.coalYardId]
+                    split_list = yard['split_list']
+                    stents = yard['stents']
+                    # polygon = yard['polygon']
+                    # 点云去噪、去顶盖、去柱子，并生成ply文件
+                    new_cloud: numpy.ndarray = numpy.array(data)
+                    new_cloud = remove_noise(cloud=new_cloud)
 
-            # 实时推送完成后 数据推送到后台接口 POST形式
+                    new_cloud = remove_cover(cloud=new_cloud, s_list=split_list)
+                    if new_cloud.size <= 3 * 4:
+                        continue
+                    new_cloud = remove_stents(cloud=new_cloud, stent_list=stents)
 
-            coalYardObj = dict()
-            coalYardObj["coalYardId"] = coal_yard_obj.coalYardId
-            coalYardObj["coalYardName"] = coal_yard_obj.coalYardName
-            coalYardObj["inventoryTime"] = datetime.now().strftime('%Y-%m-%d %H:%I:%S')
-            coalYardObj["coalHeapResultList"] = res_list
+                    file_path: str = save_cloud(cloud=new_cloud, file_path=coal_yard_path,
+                                                as_ply=True)
+                    await websocket.send_text(file_path)
 
-            coalYardObj = json.dumps(coalYardObj, default=convert2json)
-            coalYardObj = json.loads(coalYardObj)
+                elif data == 'success':
+                    await websocket.send_text('===========数据发送结束===========')
+                    cloud_list = websocket.list_buffer
+                    cloud_ndarray = numpy.array(cloud_list)
+                    # 实现用于切割煤场并计算体积的功能
+                    res_list = await split_and_calculate_volume(coal_yard=coal_yard_obj, cloud_ndarray=cloud_ndarray)
+                    for i in res_list:
+                        await websocket.send_text(
+                            "煤堆：" + i.coalHeapName + "\n" + "体积：" + str(i.volume) + "\n" + "高度：" + str(i.maxHeight))
 
-            url = base_url + '/coal/coalYard/realTime/inventoryCoalCallback'
-            re = requests.post(url, json=coalYardObj).json()
-            print("回调结果：" + str(re))
-            await websocket.send_text("盘煤回调接口调用成功！")
+                    # 实时推送完成后 数据推送到后台接口 POST形式
+                    coalYardObj = dict()
+                    coalYardObj["coalYardId"] = coal_yard_obj.coalYardId
+                    coalYardObj["coalYardName"] = coal_yard_obj.coalYardName
+                    coalYardObj["inventoryTime"] = datetime.now().strftime('%Y-%m-%d %H:%I:%S')
+                    coalYardObj["coalHeapResultList"] = res_list
 
+                    coalYardObj = json.dumps(coalYardObj, default=convert2json)
+                    coalYardObj = json.loads(coalYardObj)
+                    url = base_url + '/coal/coalYard/realTime/inventoryCoalCallback'
+                    re = requests.post(url, json=coalYardObj).json()
+                    print("回调结果：" + str(re))
+                    await websocket.send_text("盘煤回调接口调用成功！")
 
     except WebSocketDisconnect:
         manager.disconnect(websocket)
@@ -236,7 +254,7 @@ def convert2json(person):
 def radar_callback(cid: c_uint, datalen: c_int, data, ws_id):
     for i in manager.active_connections:
         if ws_id == i.clientId:
-            logger.info("进入了正确的websocket判断区间")
+            # logger.info("进入了正确的websocket判断区间")
             websocket = i
         else:
             websocket = manager.active_connections[0]
@@ -258,8 +276,9 @@ def radar_callback(cid: c_uint, datalen: c_int, data, ws_id):
     elif code == 51108:
         print("运行模式设置成功")
     elif code == 118:
-        global callback_time
-        callback_time = datetime.now()
+        global counter
+        counter += 1
+        print(f'回调进行中， i == {counter}')
 
         points_data = data[54:datalen]
         # bytes_frame = join_cid_to_bytes(point_bytes=points_data, cid=cid)
@@ -287,12 +306,12 @@ def bytes_cloud_frame_rotated(kwargs: dict):
     # websocket = get_websocket_by_wsid(ws_id=ws_id)
     for i in manager.active_connections:
         if ws_id == i.clientId:
-            logger.info("进入了正确的websocket判断区间")
+            # logger.info("进入了正确的websocket判断区间")
             websocket = i
         else:
             websocket = manager.active_connections[0]
 
-    logger.info(websocket)
+    # logger.info(websocket)
     coal_yard = websocket.coalYard
     # list_buffer = websocket.listBuffer
 
@@ -313,7 +332,7 @@ def bytes_cloud_frame_rotated(kwargs: dict):
             #     radar_cloud_pdarray = cloud_pdarray[cloud_pdarray['cid'] == cid][['x', 'y', 'z']]
             #     radar_cloud_ndarray = radar_cloud_pdarray.values
 
-            div = np.array([100, 100, 100])
+            div = np.array([100, 100, -100])
             # div = np.array([1, 1, 1])
             radar_cloud_ndarray = np.divide(cloud_ndarray, div)
             # radar_cloud_ndarray = radar_cloud_ndarray.astype(np.float16)

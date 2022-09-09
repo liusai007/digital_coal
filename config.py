@@ -15,7 +15,7 @@ class PathConfig(object):
 
 class RadarConfig(object):
     RUNMODE: int = 0
-    SPEED: int = 30
+    SPEED: int = 60
     ANGLESCENESCAN: int = 360
 
 
