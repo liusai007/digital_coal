@@ -15,6 +15,7 @@ class CoalRadar(BaseModel):
     rotateX: float
     rotateY: float
     rotateZ: float
+    matrix: list = None
     bytes_buffer: bytes = bytes()
 
 

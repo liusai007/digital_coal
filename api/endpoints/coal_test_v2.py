@@ -19,6 +19,7 @@ from methods.cloud_noise import remove_noise
 from methods.put_cloud import put_ply_to_minio
 from methods.put_cloud import put_cloud_to_minio
 from methods.cloud_save import save_cloud
+from methods.cloud_transform import radars_cloud_transform
 from methods.polygon_filter import is_poi_within_polygon
 from methods.bounding_box_filter import bounding_box_filter
 from methods.cloud_volume import *
@@ -177,6 +178,8 @@ async def inventory_coal(coal_yard: CoalYard):
         cloud_ndarray_list.append(radar_cloud_ndarray)
 
     combined_cloud_ndarray: numpy.ndarray = numpy.concatenate(cloud_ndarray_list, axis=0)
+    # combined_cloud_ndarray: numpy.ndarray = radars_cloud_transform(radars)
+
     # 点云去噪操作
     new_cloud: numpy.ndarray = remove_noise(cloud=combined_cloud_ndarray)
 
@@ -188,7 +191,8 @@ async def inventory_coal(coal_yard: CoalYard):
     # new_cloud: numpy.ndarray = remove_out_polygon_point(new_cloud, poly=polygon)
 
     # 进行煤堆切割并计算体积
-    res_list: List[InventoryCoalResult] = await split_and_calculate_volume(cloud_ndarray=new_cloud)
+    res_list: List[InventoryCoalResult] = await split_and_calculate_volume(cloud_ndarray=new_cloud,
+                                                                           coal_yard=coal_yard)
 
     coal_yard_list.remove(coal_yard)
     return success(data=res_list)
@@ -275,11 +279,11 @@ def get_coal_yard_by_id(yard_id: int):
     return custom_object
 
 
-async def split_and_calculate_volume(cloud_ndarray: numpy.ndarray):
+async def split_and_calculate_volume(cloud_ndarray: numpy.ndarray, coal_yard: CoalYard):
     res_list: List[InventoryCoalResult] = list()  # 设置一个空字典，接收煤堆对象
     time_stamp = str(time.strftime("%m%d%H%M%S"))  # 设置时间戳，标记文件生成时间
 
-    coal_yard = coal_yard_list[0]
+    # coal_yard = coal_yard_list[0]
     # 判断yard_name 文件夹是否存在，不存在创建
     coal_yard_directory = settings.DATA_PATH + '/' + coal_yard.coalYardName
     if not os.path.exists(coal_yard_directory):
