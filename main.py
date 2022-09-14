@@ -12,6 +12,7 @@ import asyncio
 import requests
 from methods.radar_func import *
 from methods.volume_func import *
+from methods.cloud_websocket import send_mesh_data
 from methods.cloud_websocket import cloud_data_generator
 # from methods.radar_func import radar_callback
 from methods.put_cloud import put_cloud_to_minio
@@ -185,9 +186,10 @@ async def websocket_endpoint(websocket: WebSocket):
                 continue
 
             # 判断yard_name 文件夹是否存在，不存在创建
-            coal_yard_path = settings.DATA_PATH + '/' + coal_yard_obj.coalYardName
-            if not os.path.exists(coal_yard_path):
-                os.makedirs(coal_yard_path)
+            local_time = time.strftime('%Y/%m/%d')
+            mesh_path = settings.DATA_PATH + '/ply/' + str(yard_id) + '/' + local_time
+            if not os.path.exists(mesh_path):
+                os.makedirs(mesh_path)
 
             # 发送长度为3000的数据帧，n代表一次发送的数据长度
             await websocket.send_text("开始传输数据")
@@ -207,9 +209,11 @@ async def websocket_endpoint(websocket: WebSocket):
                         continue
                     new_cloud = remove_stents(cloud=new_cloud, stent_list=stents)
 
-                    file_path: str = save_cloud(cloud=new_cloud, file_path=coal_yard_path,
+                    file_path: str = save_cloud(cloud=new_cloud, file_path=mesh_path,
                                                 as_ply=True)
+
                     await websocket.send_text(file_path)
+                    # await send_mesh_data(cloud=new_cloud, websocket=websocket)
 
                 elif data == 'success':
                     await websocket.send_text('===========数据发送结束===========')

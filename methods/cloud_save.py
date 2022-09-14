@@ -12,8 +12,8 @@ from scipy.spatial import Delaunay
 
 
 def save_cloud(cloud: numpy.ndarray, file_path: str, as_ply: bool):
-    ply_name = 'cloud_data' + time.strftime('%m%d%H%M%S') + '.ply'
-    full_name = file_path + '/' + ply_name
+    mesh_name = 'cloud_data' + time.strftime('%d%H%M%S') + '.ply'
+    full_name = file_path + '/' + mesh_name
 
     if cloud.size <= 10 * 3:
         print("=====发现一个空的区域=====")
@@ -31,4 +31,6 @@ def save_cloud(cloud: numpy.ndarray, file_path: str, as_ply: bool):
         if as_ply:
             diamond.to_file(full_name, also_save=["mesh"], as_text=True)
 
-        return full_name
+        # str = "http://10.1.3.136:8001/ply/id/2022/09/14/qqq.ply"
+        nginx_name = full_name.replace('/opt/python/coal_data', 'http://10.1.3.136:8001')
+        return nginx_name
