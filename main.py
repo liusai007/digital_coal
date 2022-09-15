@@ -212,8 +212,8 @@ async def websocket_endpoint(websocket: WebSocket):
 
                     file_path: str = save_cloud(cloud=new_cloud, file_path=mesh_path,
                                                 as_ply=True)
-
-                    await websocket.send_text(file_path)
+                    if file_path is not None:
+                        await websocket.send_text(file_path)
                     # await send_mesh_data(cloud=new_cloud, websocket=websocket)
 
                 elif data == 'success':
