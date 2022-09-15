@@ -16,8 +16,8 @@ def save_cloud(cloud: numpy.ndarray, file_path: str, as_ply: bool):
     full_name = file_path + '/' + mesh_name
 
     if cloud.size <= 10 * 3:
-        print("=====发现一个空的区域=====")
-        return full_name
+        nginx_name = full_name.replace('/opt/python/coal_data', 'http://10.1.3.136:8001')
+        return nginx_name
     else:
         pd_array = DataFrame(cloud, columns=["x", "y", "z"])
         x = cloud[:, 0]

@@ -10,7 +10,7 @@ from pyntcloud import PyntCloud
 async def heap_vom_and_maxheight(cloud_ndarray: numpy.ndarray, minio_path: str = None):
     # cloud_ndarray = cloud_ndarray_sample(cloud_ndarray, n_x=200, n_y=200, n_z=100)
     # 三角剖分开始
-    if cloud_ndarray.shape[0] < 500:
+    if cloud_ndarray.size < 3 * 20:
         return {'maxHeight': 0, 'volume': 0}
 
     u = cloud_ndarray[:, 0]
@@ -57,7 +57,7 @@ async def heap_vom_and_maxheight(cloud_ndarray: numpy.ndarray, minio_path: str =
 
 
 async def new_heap_vom_and_maxheight(cloud_ndarray: numpy.ndarray, minio_path: str = None):
-    if cloud_ndarray.shape[0] < 500:
+    if cloud_ndarray.size < 3 * 20:
         return {'maxHeight': 0, 'volume': 0}
 
     pd_array = DataFrame(cloud_ndarray)
@@ -86,7 +86,7 @@ async def new_heap_vom_and_maxheight(cloud_ndarray: numpy.ndarray, minio_path: s
 
 
 async def ply_heap_vom_and_height(cloud_ndarray: numpy.ndarray):
-    if cloud_ndarray.shape[0] < 500:
+    if cloud_ndarray.size < 3 * 20:
         return {'maxHeight': 0, 'volume': 0}
 
     pd_array = DataFrame(cloud_ndarray, columns=['x', 'y', 'z'])
