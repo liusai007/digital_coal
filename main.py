@@ -146,7 +146,6 @@ async def websocket_endpoint(websocket: WebSocket):
     websocket.list_buffer = list()
     base_url = settings.PATH_CONFIG.BASEURL
     # 设置回调函数，将 websocket 内存地址作为参数，传入回调中
-    set_callback_function(func=radar_callback, obj_id=websocket.clientId)
     try:
         while True:
             data = await websocket.receive_text()
@@ -155,6 +154,7 @@ async def websocket_endpoint(websocket: WebSocket):
             if data == 'start':
                 await websocket.send_text("接受的CoalYardId为：" + str(yard_id))
                 await websocket.send_text("正在通过指令进行传输，请稍后...")
+                set_callback_function(func=radar_callback, obj_id=websocket.clientId)
                 url = base_url + '/coal/coalYard/realTime/coalYardInfo?coalYardId=' + str(yard_id)
                 response = requests.get(url).json()
                 # DictOBj将一个dict转化为一个对象，方便以属性的方式访问
@@ -174,7 +174,9 @@ async def websocket_endpoint(websocket: WebSocket):
                     radars_start_connect(radars=radars)
                     await websocket.send_text('开始盘煤')
                     await asyncio.sleep(2)
+                    # begin_response = radars_rotate_begin(radars, websocket)
                     begin_response = radars_rotate_begin(radars, websocket)
+                    time.sleep(12)
                     # logger.info("开始状态")
                     # logger.info(begin_response)
                     if begin_response is False:
@@ -305,10 +307,11 @@ def radar_callback(cid: c_uint, datalen: c_int, data, ws_id):
         if last_line_flag == b'\x80':
             # radar_stop 函数停止并关闭雷达连接，同时在RADAR_BUCKET中删除雷达id
             radar_stop(c_id=cid)
+            print(str(cid) + "号函数停止关闭雷达")
             # websocket对象的属性bucket中删除雷达id
             if cid in bucket:
                 bucket.remove(cid)
-
+            counter = 0
     return
 
 
