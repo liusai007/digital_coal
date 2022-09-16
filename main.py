@@ -47,8 +47,8 @@ application = FastAPI(
 )
 
 # 事件监听
-application.add_event_handler("startup", Events.startup(application))
-application.add_event_handler("shutdown", Events.stopping(application))
+#application.add_event_handler("startup", Events.startup(application))
+#application.add_event_handler("shutdown", Events.stopping(application))
 
 # 异常错误处理
 application.add_exception_handler(HTTPException, Exceptions.http_error_handler)
@@ -213,13 +213,13 @@ async def websocket_endpoint(websocket: WebSocket):
                         continue
                     new_cloud = remove_stents(cloud=new_cloud, stent_list=stents)
 
-                    new_cloud = new_cloud * numpy.array([1, -1, 1])
+                    #new_cloud = new_cloud * numpy.array([1, -1, 1])
 
-                    file_path: str = save_cloud(cloud=new_cloud, file_path=mesh_path,
-                                                as_ply=True)
-                    if file_path is not None:
-                        await asyncio.sleep(1)
-                        await websocket.send_text(file_path)
+                    #file_path: str = save_cloud(cloud=new_cloud, file_path=mesh_path,
+                    #                            as_ply=True)
+                    #if file_path is not None:
+                    await asyncio.sleep(1)
+                    await websocket.send_text(str(new_cloud.tolist()))
 
                     # await send_mesh_data(cloud=new_cloud, websocket=websocket)
 
@@ -330,14 +330,6 @@ def bytes_cloud_frame_rotated(kwargs: dict):
 
     # logger.info(websocket)
     coal_yard = websocket.coalYard
-    # list_buffer = websocket.listBuffer
-
-    # bytes_frame = join_cid_to_bytes(point_bytes=points_data, cid=cid)
-    # # # 判断yard_name 文件夹是否存在，不存在创建
-    # FRAME_DATA_PATH = settings.DATA_PATH + '/' + coal_yard.coalYardName + '/frame_data'
-    # if not os.path.exists(FRAME_DATA_PATH):
-    #     os.makedirs(FRAME_DATA_PATH)
-
     points_data = kwargs['data']
     cloud_ndarray: numpy.ndarray = np.frombuffer(points_data, dtype=np.int16).reshape(-1, 3)
 
@@ -345,46 +337,18 @@ def bytes_cloud_frame_rotated(kwargs: dict):
     radars = coal_yard.coalRadarList
     for radar in radars:
         if radar.id == cid:
-            # if cloud_pdarray['cid'][0] == cid:
-            #     radar_cloud_pdarray = cloud_pdarray[cloud_pdarray['cid'] == cid][['x', 'y', 'z']]
-            #     radar_cloud_ndarray = radar_cloud_pdarray.values
-
             div = np.array([100, 100, 100])
             radar_cloud_ndarray = np.divide(cloud_ndarray, div)
             radar_cloud_ndarray.astype(np.float16)
 
             rotated_radar_cloud_ndarray = euler_rotate(radar_cloud_ndarray, radar=radar)
             rotated_radar_cloud_ndarray = rotated_radar_cloud_ndarray.astype(np.float32)
-
             # 点云平移操作
             shift_xyz = np.array([radar.shiftX, radar.shiftY, radar.shiftZ])
             new_cloud_array = rotated_radar_cloud_ndarray + shift_xyz
             # 点云乘以-1，适应3d煤场区域
             new_cloud_array = new_cloud_array * numpy.array([[-1, 1, 1]])
-
-            # div = np.array([100, 100, -100])
-            # div = np.array([1, 1, 1])
-            # radar_cloud_ndarray = np.divide(cloud_ndarray, div)
-            # radar_cloud_ndarray = radar_cloud_ndarray.astype(np.float16)
-
-            # rotated_radar_cloud_ndarray: numpy.ndarray = euler_rotate(radar_cloud_ndarray, radar)
-            # new_cloud: numpy.ndarray = rotated_radar_cloud_ndarray.reshape(-1, 3)
-            # new_cloud: numpy.ndarray = new_cloud[:, 1:4]
-            # new_cloud_list = rotated_radar_cloud_ndarray.tolist()
-            # list_buffer.append(new_cloud_list)
-            # list_buffer.extend(new_cloud_list)
             return new_cloud_array.tolist()
-            # await websocket.send_text(str(new_cloud_list))
-
-            # save_path = FRAME_DATA_PATH + '/radar_' + str(cid) + '_cloudData_' + str(time_now) + ".txt"
-            # np.savetxt(fname=save_path, X=rotated_radar_cloud_ndarray, fmt='%.2f', delimiter=' ')
-            # f = open(save_path, 'r')
-            # con = f.readlines()
-            # f.close()
-            # 以上代表已经经过欧拉旋转并且平移的 帧数据
-            # return rotated_radar_cloud_ndarray
-            # len_array = rotated_radar_cloud_ndarray.__len__()
-            # ALL_DATA.append(con)
 
 
 async def start(ws_id):
