@@ -173,10 +173,10 @@ async def websocket_endpoint(websocket: WebSocket):
                     # 如果雷达全部处于停止状态，则开始进行连接雷达操作
                     radars_start_connect(radars=radars)
                     await websocket.send_text('开始盘煤')
+                    await websocket.send_text('接受雷达返回数据中，请稍后')
                     await asyncio.sleep(2)
-                    # begin_response = radars_rotate_begin(radars, websocket)
                     begin_response = radars_rotate_begin(radars, websocket)
-                    time.sleep(12)
+                    await asyncio.sleep(12)
                     # logger.info("开始状态")
                     # logger.info(begin_response)
                     if begin_response is False:
@@ -196,9 +196,10 @@ async def websocket_endpoint(websocket: WebSocket):
 
             # 发送长度为3000的数据帧，n代表一次发送的数据长度
             await websocket.send_text("开始传输数据")
-            data_iterator = cloud_data_generator(websocket, n=5000)
+            data_iterator = cloud_data_generator(websocket, n=20000)
             for data in data_iterator:
                 if isinstance(data, list):
+
                     yard = COAL_YARDS[coal_yard_obj.coalYardId]
                     split_list = yard['split_list']
                     stents = yard['stents']
@@ -212,10 +213,14 @@ async def websocket_endpoint(websocket: WebSocket):
                         continue
                     new_cloud = remove_stents(cloud=new_cloud, stent_list=stents)
 
+                    new_cloud = new_cloud * numpy.array([1, -1, 1])
+
                     file_path: str = save_cloud(cloud=new_cloud, file_path=mesh_path,
                                                 as_ply=True)
                     if file_path is not None:
+                        await asyncio.sleep(1)
                         await websocket.send_text(file_path)
+
                     # await send_mesh_data(cloud=new_cloud, websocket=websocket)
 
                 elif data == 'success':
@@ -307,11 +312,9 @@ def radar_callback(cid: c_uint, datalen: c_int, data, ws_id):
         if last_line_flag == b'\x80':
             # radar_stop 函数停止并关闭雷达连接，同时在RADAR_BUCKET中删除雷达id
             radar_stop(c_id=cid)
-            print(str(cid) + "号函数停止关闭雷达")
             # websocket对象的属性bucket中删除雷达id
             if cid in bucket:
                 bucket.remove(cid)
-            counter = 0
     return
 
 
@@ -346,18 +349,31 @@ def bytes_cloud_frame_rotated(kwargs: dict):
             #     radar_cloud_pdarray = cloud_pdarray[cloud_pdarray['cid'] == cid][['x', 'y', 'z']]
             #     radar_cloud_ndarray = radar_cloud_pdarray.values
 
-            div = np.array([100, 100, -100])
-            # div = np.array([1, 1, 1])
+            div = np.array([100, 100, 100])
             radar_cloud_ndarray = np.divide(cloud_ndarray, div)
+            radar_cloud_ndarray.astype(np.float16)
+
+            rotated_radar_cloud_ndarray = euler_rotate(radar_cloud_ndarray, radar=radar)
+            rotated_radar_cloud_ndarray = rotated_radar_cloud_ndarray.astype(np.float32)
+
+            # 点云平移操作
+            shift_xyz = np.array([radar.shiftX, radar.shiftY, radar.shiftZ])
+            new_cloud_array = rotated_radar_cloud_ndarray + shift_xyz
+            # 点云乘以-1，适应3d煤场区域
+            new_cloud_array = new_cloud_array * numpy.array([[-1, 1, 1]])
+
+            # div = np.array([100, 100, -100])
+            # div = np.array([1, 1, 1])
+            # radar_cloud_ndarray = np.divide(cloud_ndarray, div)
             # radar_cloud_ndarray = radar_cloud_ndarray.astype(np.float16)
 
-            rotated_radar_cloud_ndarray: numpy.ndarray = euler_rotate(radar_cloud_ndarray, radar)
+            # rotated_radar_cloud_ndarray: numpy.ndarray = euler_rotate(radar_cloud_ndarray, radar)
             # new_cloud: numpy.ndarray = rotated_radar_cloud_ndarray.reshape(-1, 3)
             # new_cloud: numpy.ndarray = new_cloud[:, 1:4]
-            new_cloud_list = rotated_radar_cloud_ndarray.tolist()
+            # new_cloud_list = rotated_radar_cloud_ndarray.tolist()
             # list_buffer.append(new_cloud_list)
             # list_buffer.extend(new_cloud_list)
-            return new_cloud_list
+            return new_cloud_array.tolist()
             # await websocket.send_text(str(new_cloud_list))
 
             # save_path = FRAME_DATA_PATH + '/radar_' + str(cid) + '_cloudData_' + str(time_now) + ".txt"

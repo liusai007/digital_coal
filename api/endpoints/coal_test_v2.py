@@ -17,9 +17,7 @@ from methods.cloud_cover import remove_cover
 from methods.cloud_stent import remove_stents
 from methods.cloud_noise import remove_noise
 from methods.put_cloud import put_ply_to_minio
-from methods.put_cloud import put_cloud_to_minio
 from methods.cloud_save import save_cloud
-from methods.cloud_transform import radars_cloud_transform
 from methods.polygon_filter import is_poi_within_polygon
 from methods.bounding_box_filter import bounding_box_filter
 from methods.cloud_volume import *
@@ -285,7 +283,8 @@ async def split_and_calculate_volume(cloud_ndarray: numpy.ndarray, coal_yard: Co
 
     # coal_yard = coal_yard_list[0]
     # 判断yard_name 文件夹是否存在，不存在创建
-    coal_yard_directory = settings.DATA_PATH + '/' + coal_yard.coalYardName
+    local_time = time.strftime('%Y/%m/%d')
+    coal_yard_directory = settings.DATA_PATH + '/ply/' + str(coal_yard.coalYardId) + '/' + local_time
     if not os.path.exists(coal_yard_directory):
         os.makedirs(coal_yard_directory)
 
@@ -311,7 +310,7 @@ async def split_and_calculate_volume(cloud_ndarray: numpy.ndarray, coal_yard: Co
         # 点云乘以-1，适应3d煤场区域
         split_cloud_ndarray = split_cloud_ndarray * numpy.array([[1, -1, 1]])
         save_path = save_cloud(cloud=split_cloud_ndarray, file_path=coal_yard_directory, as_ply=True)
-        res.cloudInfo = put_ply_to_minio(ply_name=filename, file_path=save_path)
+        res.cloudInfo = save_path
 
         # 煤堆信息对象保存至 list
         res_list.append(res)
