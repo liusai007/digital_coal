@@ -47,8 +47,8 @@ application = FastAPI(
 )
 
 # 事件监听
-#application.add_event_handler("startup", Events.startup(application))
-#application.add_event_handler("shutdown", Events.stopping(application))
+application.add_event_handler("startup", Events.startup(application))
+application.add_event_handler("shutdown", Events.stopping(application))
 
 # 异常错误处理
 application.add_exception_handler(HTTPException, Exceptions.http_error_handler)
@@ -145,13 +145,14 @@ async def websocket_endpoint(websocket: WebSocket):
     await websocket.send_text('Websocket已连接成功，正在等待用户指令！')
     websocket.list_buffer = list()
     base_url = settings.PATH_CONFIG.BASEURL
+    inventory_time = None
     # 设置回调函数，将 websocket 内存地址作为参数，传入回调中
     try:
         while True:
             data = await websocket.receive_text()
             yard_id = websocket.query_params['coalYardId']
-
             if data == 'start':
+                inventory_time = datetime.now().strftime('%Y-%m-%d %H:%I:%S')
                 await websocket.send_text("接受的CoalYardId为：" + str(yard_id))
                 await websocket.send_text("正在通过指令进行传输，请稍后...")
                 set_callback_function(func=radar_callback, obj_id=websocket.clientId)
@@ -236,18 +237,18 @@ async def websocket_endpoint(websocket: WebSocket):
                     # 实现用于切割煤场并计算体积的功能
                     res_list = await split_and_calculate_volume(coal_yard=coal_yard_obj, cloud=new_cloud)
                     for i in res_list:
-                        await websocket.send_text(
-                            "煤堆：" + i.coalHeapName + "\n" + "体积：" + str(i.volume) + "\n" + "高度：" + str(i.maxHeight))
+                        await websocket.send_text("煤堆：" + i.coalHeapName + "\n" + "体积：" + str(i.volume) + "\n" + "高度：" + str(i.maxHeight) + "\n" + "文件路径：" + i.cloudInfo)
 
                     # 实时推送完成后 数据推送到后台接口 POST形式
                     coalYardObj = dict()
                     coalYardObj["coalYardId"] = coal_yard_obj.coalYardId
                     coalYardObj["coalYardName"] = coal_yard_obj.coalYardName
-                    coalYardObj["inventoryTime"] = datetime.now().strftime('%Y-%m-%d %H:%I:%S')
+                    coalYardObj["inventoryTime"] = inventory_time
                     coalYardObj["coalHeapResultList"] = res_list
 
                     coalYardObj = json.dumps(coalYardObj, default=convert2json)
                     coalYardObj = json.loads(coalYardObj)
+                    print("回调参数：" + str(coalYardObj))
                     url = base_url + '/coal/coalYard/realTime/inventoryCoalCallback'
                     re = requests.post(url, json=coalYardObj).json()
                     print("回调结果：" + str(re))
@@ -264,6 +265,7 @@ def convert2json(person):
         'coalHeapName': person.coalHeapName,
         'volume': person.volume,
         'maxHeight': person.maxHeight,
+        'cloudInfo': person.cloudInfo,
         'density': person.density,
         'mesId': person.mesId
     }
@@ -378,33 +380,18 @@ async def split_and_calculate_volume(coal_yard, cloud: numpy.ndarray):
         res = InventoryCoalResult()
         res.coalHeapId = heap.coalHeapId
         res.coalHeapName = heap.coalHeapName
-        res.density = heap.density
-        res.mesId = heap.mesId
-
         # 根据煤堆区域切割获取小点云文件(ndarray类型)，并保存ndarray类型为txt文件
         split_cloud_ndarray: numpy.ndarray = bounding_box_filter(cloud, heap.coalHeapArea)
-
         # 根据小点云文件(ndarray类型)计算体积和高度
         vom_and_height = await ply_heap_vom_and_height(cloud_ndarray=split_cloud_ndarray)
         res.volume = vom_and_height['volume']
         res.maxHeight = vom_and_height['maxHeight']
         print("%s 体积: %.2f，高度: %.2f" % (res.coalHeapName, res.volume, res.maxHeight))
-
         # 点云乘以-1，适应3d煤场区域
         split_cloud_ndarray = split_cloud_ndarray * numpy.array([[1, -1, 1]])
         save_path = save_cloud(cloud=split_cloud_ndarray, file_path=coal_yard_directory, as_ply=True)
         res.cloudInfo = save_path
-
         # 煤堆信息对象保存至 list
         res_list.append(res)
     return res_list
 
-
-if __name__ == '__main__':
-    import uvicorn
-
-    uvicorn.run(app="main:application",
-                host='0.0.0.0',
-                port=8001,
-                workers=1,
-                reload=True)

@@ -56,7 +56,7 @@ coal            #根目录
 ```sh
     source /opt/python/venv/bin/activate
     进入虚拟环境目录
-    nohup uvicorn main:application --host 0.0.0.0 --port 8001 --reload  > coal.log 2>&1 &
+    nohup uvicorn main:application --host 0.0.0.0 --port 8001  > coal.log 2>&1 &
     后台启动
 ```
 ```sh
