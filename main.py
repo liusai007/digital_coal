@@ -36,6 +36,7 @@ from starlette.middleware.sessions import SessionMiddleware
 from fastapi.openapi.docs import (get_redoc_html, get_swagger_ui_html, get_swagger_ui_oauth2_redirect_html)
 from config import settings
 from core import Events, Exceptions, Middleware, Router
+from radars.status_code import *
 
 application = FastAPI(
     debug=settings.APP_DEBUG,
@@ -140,9 +141,9 @@ async def websocket_endpoint(websocket: WebSocket):
     await manager.connect(websocket)
     clientId = random.randint(1, 10000)
     websocket.clientId = clientId
-    await websocket.send_text("当前websocket的clientId为：" + str(websocket.clientId))
+    await websocket.send_text(jsonParseMessage(info, "当前websocket的clientId为：" + str(websocket.clientId)))
     ws_id = id(websocket)
-    await websocket.send_text('Websocket已连接成功，正在等待用户指令！')
+    await websocket.send_text(jsonParseMessage(info, 'Websocket已连接成功，正在等待用户指令！'))
     websocket.list_buffer = list()
     base_url = settings.PATH_CONFIG.BASEURL
     inventory_time = None
@@ -152,9 +153,9 @@ async def websocket_endpoint(websocket: WebSocket):
             data = await websocket.receive_text()
             yard_id = websocket.query_params['coalYardId']
             if data == 'start':
+                await websocket.send_text(jsonParseMessage(info, "接受的CoalYardId为：" + str(yard_id)))
+                await websocket.send_text(jsonParseMessage(info, "正在通过指令进行传输，请稍后..."))
                 inventory_time = datetime.now().strftime('%Y-%m-%d %H:%I:%S')
-                await websocket.send_text("接受的CoalYardId为：" + str(yard_id))
-                await websocket.send_text("正在通过指令进行传输，请稍后...")
                 set_callback_function(func=radar_callback, obj_id=websocket.clientId)
                 url = base_url + '/coal/coalYard/realTime/coalYardInfo?coalYardId=' + str(yard_id)
                 response = requests.get(url).json()
@@ -168,24 +169,24 @@ async def websocket_endpoint(websocket: WebSocket):
                 radars = coal_yard_obj.coalRadarList
                 if is_every_radar_stop(radars) is False:
                     # 如果雷达没有全部停止，则发送等待信号
-                    await websocket.send_text('雷达正在运行中，请稍后重试......')
+                    await websocket.send_text(jsonParseMessage(error, '雷达正在运行中，请稍后重试......'))
                 elif is_every_radar_stop(radars) is True:
                     websocket.conn_radarsBucket = list()
                     # 如果雷达全部处于停止状态，则开始进行连接雷达操作
                     radars_start_connect(radars=radars)
-                    await websocket.send_text('开始盘煤')
-                    await websocket.send_text('接受雷达返回数据中，请稍后')
+                    await websocket.send_text(jsonParseMessage(info, '开始盘煤'))
+                    await websocket.send_text(jsonParseMessage(info, '接受雷达返回数据中，请稍后'))
                     await asyncio.sleep(2)
                     begin_response = radars_rotate_begin(radars, websocket)
                     await asyncio.sleep(12)
                     # logger.info("开始状态")
                     # logger.info(begin_response)
                     if begin_response is False:
-                        await websocket.send_text('存在未连接成功的雷达，操作中止......')
+                        await websocket.send_text(jsonParseMessage(error, '存在未连接成功的雷达，操作中止......'))
                         # logger.info("存在未连接成功的雷达，操作中止")
                         continue
             else:
-                await websocket.send_text(data='输入的指令暂时无法识别，请联系管理员')
+                await websocket.send_text(jsonParseMessage(error, '输入的指令暂时无法识别，请联系管理员'))
                 # logger.info("输入的指令暂时无法识别，请联系管理员")
                 continue
 
@@ -196,7 +197,7 @@ async def websocket_endpoint(websocket: WebSocket):
                 os.makedirs(mesh_path)
 
             # 发送长度为3000的数据帧，n代表一次发送的数据长度
-            await websocket.send_text("开始传输数据")
+            await websocket.send_text(jsonParseMessage(info, "开始传输数据"))
             data_iterator = cloud_data_generator(websocket, n=20000)
             for data in data_iterator:
                 if isinstance(data, list):
@@ -220,12 +221,12 @@ async def websocket_endpoint(websocket: WebSocket):
                     #                            as_ply=True)
                     #if file_path is not None:
                     await asyncio.sleep(1)
-                    await websocket.send_text(str(new_cloud.tolist()))
+                    await websocket.send_text(jsonParseMessage(success, str(new_cloud.tolist())))
 
                     # await send_mesh_data(cloud=new_cloud, websocket=websocket)
 
                 elif data == 'success':
-                    await websocket.send_text('===========数据发送结束===========')
+                    await websocket.send_text(jsonParseMessage(info, '===========数据发送结束==========='))
                     yard = COAL_YARDS[coal_yard_obj.coalYardId]
                     split_list = yard['split_list']
                     stents = yard['stents']
@@ -237,7 +238,8 @@ async def websocket_endpoint(websocket: WebSocket):
                     # 实现用于切割煤场并计算体积的功能
                     res_list = await split_and_calculate_volume(coal_yard=coal_yard_obj, cloud=new_cloud)
                     for i in res_list:
-                        await websocket.send_text("煤堆：" + i.coalHeapName + "\n" + "体积：" + str(i.volume) + "\n" + "高度：" + str(i.maxHeight) + "\n" + "文件路径：" + str(i.cloudInfo))
+                        await websocket.send_text(jsonParseMessage(info,
+                                                                   "煤堆：" + i.coalHeapName + "\n" + "体积：" + str(i.volume) + "\n" + "高度：" + str(i.maxHeight)))
 
                     # 实时推送完成后 数据推送到后台接口 POST形式
                     coalYardObj = dict()
@@ -252,11 +254,18 @@ async def websocket_endpoint(websocket: WebSocket):
                     url = base_url + '/coal/coalYard/realTime/inventoryCoalCallback'
                     re = requests.post(url, json=coalYardObj).json()
                     print("回调结果：" + str(re))
-                    await websocket.send_text("盘煤回调接口调用成功！")
+                    await websocket.send_text(jsonParseMessage(info, "盘煤回调接口调用成功！"))
 
     except WebSocketDisconnect:
         manager.disconnect(websocket)
         # await manager.broadcast(f"Client #{client_id} left the chat")
+
+
+def jsonParseMessage(code: int, data: str):
+    result = dict()
+    result['code'] = code
+    result['data'] = data
+    return json.dumps(result, ensure_ascii=False)
 
 
 def convert2json(person):
@@ -395,3 +404,12 @@ async def split_and_calculate_volume(coal_yard, cloud: numpy.ndarray):
         res_list.append(res)
     return res_list
 
+
+if __name__ == '__main__':
+    import uvicorn
+
+    uvicorn.run(app="main:application",
+                host='0.0.0.0',
+                port=8001,
+                workers=1,
+                reload=True)
