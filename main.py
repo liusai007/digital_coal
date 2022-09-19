@@ -237,7 +237,7 @@ async def websocket_endpoint(websocket: WebSocket):
                     # 实现用于切割煤场并计算体积的功能
                     res_list = await split_and_calculate_volume(coal_yard=coal_yard_obj, cloud=new_cloud)
                     for i in res_list:
-                        await websocket.send_text("煤堆：" + i.coalHeapName + "\n" + "体积：" + str(i.volume) + "\n" + "高度：" + str(i.maxHeight) + "\n" + "文件路径：" + i.cloudInfo)
+                        await websocket.send_text("煤堆：" + i.coalHeapName + "\n" + "体积：" + str(i.volume) + "\n" + "高度：" + str(i.maxHeight) + "\n" + "文件路径：" + str(i.cloudInfo))
 
                     # 实时推送完成后 数据推送到后台接口 POST形式
                     coalYardObj = dict()
