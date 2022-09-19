@@ -28,7 +28,7 @@ pip config list
 ```
 ## 安装依赖
 ```markdown
-pip install -r requirement.txt
+pip install -r requirements.txt
 ```
 ## 导出依赖包
 pip freeze > requirements.txt

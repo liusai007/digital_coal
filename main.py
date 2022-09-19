@@ -47,8 +47,8 @@ application = FastAPI(
 )
 
 # 事件监听
-application.add_event_handler("startup", Events.startup(application))
-application.add_event_handler("shutdown", Events.stopping(application))
+#application.add_event_handler("startup", Events.startup(application))
+#application.add_event_handler("shutdown", Events.stopping(application))
 
 # 异常错误处理
 application.add_exception_handler(HTTPException, Exceptions.http_error_handler)
@@ -213,13 +213,13 @@ async def websocket_endpoint(websocket: WebSocket):
                         continue
                     new_cloud = remove_stents(cloud=new_cloud, stent_list=stents)
 
-                    new_cloud = new_cloud * numpy.array([1, -1, 1])
+                    #new_cloud = new_cloud * numpy.array([1, -1, 1])
 
-                    file_path: str = save_cloud(cloud=new_cloud, file_path=mesh_path,
-                                                as_ply=True)
-                    if file_path is not None:
-                        await asyncio.sleep(1)
-                        await websocket.send_text(file_path)
+                    #file_path: str = save_cloud(cloud=new_cloud, file_path=mesh_path,
+                    #                            as_ply=True)
+                    #if file_path is not None:
+                    await asyncio.sleep(1)
+                    await websocket.send_text(str(new_cloud.tolist()))
 
                     # await send_mesh_data(cloud=new_cloud, websocket=websocket)
 
@@ -330,14 +330,6 @@ def bytes_cloud_frame_rotated(kwargs: dict):
 
     # logger.info(websocket)
     coal_yard = websocket.coalYard
-    # list_buffer = websocket.listBuffer
-
-    # bytes_frame = join_cid_to_bytes(point_bytes=points_data, cid=cid)
-    # # # 判断yard_name 文件夹是否存在，不存在创建
-    # FRAME_DATA_PATH = settings.DATA_PATH + '/' + coal_yard.coalYardName + '/frame_data'
-    # if not os.path.exists(FRAME_DATA_PATH):
-    #     os.makedirs(FRAME_DATA_PATH)
-
     points_data = kwargs['data']
     cloud_ndarray: numpy.ndarray = np.frombuffer(points_data, dtype=np.int16).reshape(-1, 3)
 
@@ -345,46 +337,18 @@ def bytes_cloud_frame_rotated(kwargs: dict):
     radars = coal_yard.coalRadarList
     for radar in radars:
         if radar.id == cid:
-            # if cloud_pdarray['cid'][0] == cid:
-            #     radar_cloud_pdarray = cloud_pdarray[cloud_pdarray['cid'] == cid][['x', 'y', 'z']]
-            #     radar_cloud_ndarray = radar_cloud_pdarray.values
-
             div = np.array([100, 100, 100])
             radar_cloud_ndarray = np.divide(cloud_ndarray, div)
             radar_cloud_ndarray.astype(np.float16)
 
             rotated_radar_cloud_ndarray = euler_rotate(radar_cloud_ndarray, radar=radar)
             rotated_radar_cloud_ndarray = rotated_radar_cloud_ndarray.astype(np.float32)
-
             # 点云平移操作
             shift_xyz = np.array([radar.shiftX, radar.shiftY, radar.shiftZ])
             new_cloud_array = rotated_radar_cloud_ndarray + shift_xyz
             # 点云乘以-1，适应3d煤场区域
             new_cloud_array = new_cloud_array * numpy.array([[-1, 1, 1]])
-
-            # div = np.array([100, 100, -100])
-            # div = np.array([1, 1, 1])
-            # radar_cloud_ndarray = np.divide(cloud_ndarray, div)
-            # radar_cloud_ndarray = radar_cloud_ndarray.astype(np.float16)
-
-            # rotated_radar_cloud_ndarray: numpy.ndarray = euler_rotate(radar_cloud_ndarray, radar)
-            # new_cloud: numpy.ndarray = rotated_radar_cloud_ndarray.reshape(-1, 3)
-            # new_cloud: numpy.ndarray = new_cloud[:, 1:4]
-            # new_cloud_list = rotated_radar_cloud_ndarray.tolist()
-            # list_buffer.append(new_cloud_list)
-            # list_buffer.extend(new_cloud_list)
             return new_cloud_array.tolist()
-            # await websocket.send_text(str(new_cloud_list))
-
-            # save_path = FRAME_DATA_PATH + '/radar_' + str(cid) + '_cloudData_' + str(time_now) + ".txt"
-            # np.savetxt(fname=save_path, X=rotated_radar_cloud_ndarray, fmt='%.2f', delimiter=' ')
-            # f = open(save_path, 'r')
-            # con = f.readlines()
-            # f.close()
-            # 以上代表已经经过欧拉旋转并且平移的 帧数据
-            # return rotated_radar_cloud_ndarray
-            # len_array = rotated_radar_cloud_ndarray.__len__()
-            # ALL_DATA.append(con)
 
 
 async def start(ws_id):
@@ -402,10 +366,9 @@ async def start(ws_id):
 
 async def split_and_calculate_volume(coal_yard, cloud: numpy.ndarray):
     res_list = list()  # 设置一个空字典，接收煤堆对象
-    time_stamp = str(time.strftime("%m%d%H%M%S"))  # 设置时间戳，标记文件生成时间
 
-    # 判断yard_name 文件夹是否存在，不存在创建
-    coal_yard_directory = settings.DATA_PATH + '/' + coal_yard.coalYardName
+    local_time = time.strftime('%Y/%m/%d')
+    coal_yard_directory = settings.DATA_PATH + '/ply/' + str(coal_yard.coalYardId) + '/' + local_time
     if not os.path.exists(coal_yard_directory):
         os.makedirs(coal_yard_directory)
 
@@ -418,12 +381,8 @@ async def split_and_calculate_volume(coal_yard, cloud: numpy.ndarray):
         res.density = heap.density
         res.mesId = heap.mesId
 
-        minio_name = 'coalHeap' + str(heap.coalHeapId) + '_' + time_stamp + '.txt'
-        minio_path = coal_yard_directory + '/' + minio_name
-
         # 根据煤堆区域切割获取小点云文件(ndarray类型)，并保存ndarray类型为txt文件
         split_cloud_ndarray: numpy.ndarray = bounding_box_filter(cloud, heap.coalHeapArea)
-        # numpy.savetxt(fname=minio_path, X=split_cloud_ndarray, fmt='%.2f', delimiter=' ')
 
         # 根据小点云文件(ndarray类型)计算体积和高度
         vom_and_height = await ply_heap_vom_and_height(cloud_ndarray=split_cloud_ndarray)
@@ -431,13 +390,10 @@ async def split_and_calculate_volume(coal_yard, cloud: numpy.ndarray):
         res.maxHeight = vom_and_height['maxHeight']
         print("%s 体积: %.2f，高度: %.2f" % (res.coalHeapName, res.volume, res.maxHeight))
 
-        list_cloud = split_cloud_ndarray.tolist()
-        bytes_cloud = bytes(str(list_cloud), encoding='utf-8')
-        # 上传文件至 minio,返回minio文件路径
-        print("list_cloud长度为" + str(len(list_cloud)))
-        if len(list_cloud) != 0:
-            data_buffer = io.BytesIO(bytes_cloud)
-            res.cloudInfo = put_cloud_to_minio(f_name=minio_name, data=data_buffer, length=len(bytes_cloud))
+        # 点云乘以-1，适应3d煤场区域
+        split_cloud_ndarray = split_cloud_ndarray * numpy.array([[1, -1, 1]])
+        save_path = save_cloud(cloud=split_cloud_ndarray, file_path=coal_yard_directory, as_ply=True)
+        res.cloudInfo = save_path
 
         # 煤堆信息对象保存至 list
         res_list.append(res)
