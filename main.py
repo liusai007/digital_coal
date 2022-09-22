@@ -3,6 +3,7 @@
 @Author : lpy
 @DES:
 """
+print("随便家电东西！！！")
 import _ctypes
 import random
 import json
